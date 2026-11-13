@@ -1,0 +1,19 @@
+# Cold boot -> backup-RAM warning (shows the title-text patch) -> main menu.
+# Leaves states/menu.state for later scenarios and for the window.
+wait 300
+shot 1-bios
+wait 1500
+shot 2-warning
+press a
+wait 180
+shot 3-save-created
+press start
+wait 600
+shot 4-title
+press start
+wait 300
+expect-change
+shot 5-main-menu
+# let the menu's CD reads finish: a state saved mid-read restores broken
+wait 600
+save menu

@@ -1,0 +1,25 @@
+# Main menu -> Enter Contest -> default fighter -> fight, with random 6-button
+# play as player 1 against the CPU. Leaves states/fight.state.
+load menu
+press start
+wait 240
+shot 1-player-select
+press start
+wait 240
+expect-change
+shot 2-versus
+press start
+wait 400
+expect-change
+shot 3-stage-card
+press start
+wait 600
+expect-change
+shot 4-fight
+save fight
+mash 900 1
+expect-change
+shot 5-mash-15s
+mash 900 2
+expect-change
+shot 6-mash-30s

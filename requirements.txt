@@ -1,0 +1,4 @@
+# What tools/build.py needs to turn your discs into the Eternal Kombat disc.
+# Plain Python plus Pillow and numpy (art conversion). No emulator needed.
+Pillow>=9.0
+numpy>=1.21

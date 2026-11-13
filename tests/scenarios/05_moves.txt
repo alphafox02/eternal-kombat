@@ -1,0 +1,18 @@
+# Every EC input from the same duel start (states/duel.state from tools/duelstate.py), captured mid-move.
+load duel; press x 4; wait 6; shot 00-X-jab
+load duel; press y 4; wait 8; shot 01-Y-punch
+load duel; press z 4; wait 10; shot 02-Z-overhead
+load duel; press a 4; wait 6; shot 03-A-knee
+load duel; press b 4; wait 8; shot 04-B-front-kick
+load duel; press c 4; wait 10; shot 05-C-spin-kick
+load duel; hold down 8; press down+x 4; wait 6; shot 06-down-X
+load duel; hold down 8; press down+y 4; wait 8; shot 07-down-Y
+load duel; hold down 8; press down+z 4; wait 8; shot 08-down-Z
+load duel; hold down 8; press down+a 4; wait 6; shot 09-down-A
+load duel; hold down 8; press down+c 4; wait 10; shot 10-down-C
+load duel; press down 3; press down+right 3; press right+c 4; wait 14; shot 11-qcf-C-throw
+load duel; hold down 20; shot 12-crouch
+load duel; hold right 14; shot 13-walk
+load duel; press up 4; wait 14; shot 14-jump
+load duel; hold left 12; shot 15-block
+sheet tour

@@ -1,0 +1,5 @@
+# Research and testing instruments, not needed to build.
+-r requirements.txt
+capstone>=5.0        # 68000 disassembler (tools/ecdis.py)
+unicorn>=2.0         # 68000 emulator: runs EC's own sprite unpacker (tools/ecsprite.py)
+stable-retro>=1.0    # ships the Genesis Plus GX libretro core tools/scd.py drives

@@ -1,0 +1,26 @@
+# ---- Commercial game data: NEVER commit ----
+# Your own disc rips go in roms/ (any layout; see tools/checkinputs.py).
+roms/
+bios/
+*.bin
+*.cue
+*.iso
+*.chd
+*.7z
+*.rar
+*.zip
+*.xdelta
+
+# ---- Generated from your discs ----
+extracted/
+build/
+
+# ---- Emulator output ----
+states/
+saves/
+shots/
+runs/
+
+__pycache__/
+*.pyc
+.venv/
