@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Are the discs this project needs under roms/, and are they the right dumps?
-
-    python3 tools/checkinputs.py
 
 Put your own rips anywhere under roms/ (any folder names, bin/cue,
 one-bin-per-track or single-bin). Discs are recognised by the SHA-1 of their
 data track, so file names don't matter. A different revision is a warning,
 not a refusal.
+
+    python3 tools/checkinputs.py
 """
 import os, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib'))   # (the library: tools/lib/)
 from inputs import KNOWN, ROMS, scan
 
 BIOS = os.path.join(os.path.dirname(ROMS), 'bios')
@@ -36,7 +37,6 @@ def main():
         if 'looks like' not in note:
             print(f'\n  note: {os.path.relpath(cue, ROMS)}: {note}')
     if archives:
-        unpacked = {os.path.splitext(os.path.basename(a))[0] for a in archives}
         print('\n  Archives under roms/ (only extracted discs are read):')
         for a in archives:
             print(f'    {os.path.relpath(a, ROMS)}')

@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Play, script or auto-test a disc under Genesis Plus GX (Sega CD).
 
     play.py window [DISC] [--state NAME]     interactive window with sound
-    play.py run    [DISC] SCENARIO|"script"  headless scripted run -> shots/
-    play.py test   [--no-build]              build, run tests/scenarios/*.txt,
-                                             write runs/<time>/report.md
+    play.py run    [DISC] SCENARIO|"script"  headless scripted run -> build/shots/
+    play.py test   [--no-build]              build, run tools/checks/scenarios/*.txt,
+                                             write build/runs/<time>/report.md
 
 DISC defaults to the built disc (build/Eternal Kombat/Eternal Kombat.cue), or
 the original EC disc if nothing is built yet. Use 'ec' or 'mk' for originals.
 
-Savestates live in states/ and are shared: save in the window with F2 and a
+Savestates live in build/states/ and are shared: save in the window with F2 and a
 scenario can 'load quick'; a scenario can 'save fight' and the window can open
 it with --state fight.
 
 Window keys
     arrows  d-pad          Z X C   A B C        A S D   X Y Z
     Enter   Start          Tab     Mode
-    F2 save states/quick   F4 load quick        F12 screenshot
+    F2 save build/states/quick   F4 load quick        F12 screenshot
     F3 fast-forward        P  pause             Esc quit
 
 Scenario commands (one per line or ';'-separated, '#' comments)
@@ -26,19 +27,19 @@ Scenario commands (one per line or ';'-separated, '#' comments)
     mash N [SEED]           random 6-button play for N frames (player 1)
     shot NAME               save frame as NAME.png in the run's folder
     sheet NAME              contact sheet of every shot so far in this run
-    save NAME / load NAME   savestates in states/
+    save NAME / load NAME   savestates in build/states/
     dump NAME               write exposed memory (512K sub-CPU PRG-RAM) to NAME.prgram.bin
     expect-change           fail unless the screen changed since the last shot
 """
 import argparse, datetime, glob, os, random, subprocess, sys, time
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib'))   # (the library: tools/lib/)
 import numpy as np
 from PIL import Image
 from scd import Core
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STATES = os.path.join(ROOT, 'states')
-SHOTS = os.path.join(ROOT, 'shots')
+STATES = os.path.join(ROOT, 'build', 'states')
+SHOTS = os.path.join(ROOT, 'build', 'shots')
 BUILT = os.path.join(ROOT, 'build', 'Eternal Kombat', 'Eternal Kombat.cue')
 BUTTONS = ['a', 'b', 'c', 'x', 'y', 'z']
 DIRS = ['up', 'down', 'left', 'right']
@@ -118,7 +119,7 @@ def run_script(core, script, out, log=print):
             log(f'  sheet {os.path.relpath(p, ROOT)}')
         elif op == 'save':
             core.save_state(state_path(w[1]))
-            log(f'  saved states/{w[1]}.state')
+            log(f'  saved build/states/{w[1]}.state')
         elif op == 'load':
             core.load_state(state_path(w[1]))
         elif op == 'dump':
@@ -132,7 +133,7 @@ def run_script(core, script, out, log=print):
 def read_scenario(arg):
     if os.path.exists(arg):
         return open(arg).read()
-    p = os.path.join(ROOT, 'tests', 'scenarios', arg + ('' if arg.endswith('.txt') else '.txt'))
+    p = os.path.join(ROOT, 'tools', 'checks', 'scenarios', arg + ('' if arg.endswith('.txt') else '.txt'))
     if os.path.exists(p):
         return open(p).read()
     return arg   # inline script
@@ -164,12 +165,12 @@ def cmd_test(a):
             raise SystemExit('build failed')
     disc = resolve_disc(a.disc)
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-    run_dir = os.path.join(ROOT, 'runs', stamp)
-    # keep the 3 most recent earlier runs; older ones are just clutter
+    run_dir = os.path.join(ROOT, 'build', 'runs', stamp)
+    # keep the 3 most recent earlier runs
     import shutil
-    for old in sorted(glob.glob(os.path.join(ROOT, 'runs', '2*')))[:-3]:
+    for old in sorted(glob.glob(os.path.join(ROOT, 'build', 'runs', '2*')))[:-3]:
         shutil.rmtree(old, ignore_errors=True)
-    files = sorted(glob.glob(os.path.join(ROOT, 'tests', 'scenarios', '*.txt')))
+    files = sorted(glob.glob(os.path.join(ROOT, 'tools', 'checks', 'scenarios', '*.txt')))
     if a.only:
         files = [f for f in files if any(o in os.path.basename(f) for o in a.only)]
     report = [f'# Test run {stamp}', '', f'Disc: `{os.path.relpath(disc, ROOT)}`', '']
@@ -179,6 +180,12 @@ def cmd_test(a):
         out = os.path.join(run_dir, name)
         print(name, flush=True)
         t = time.time()
+        duel, menu = os.path.join(ROOT, 'build', 'states', 'duel.state'), os.path.join(ROOT, 'build', 'states', 'menu.state')
+        if 'load duel;' in open(f).read() and os.path.exists(menu) and (
+                not os.path.exists(duel) or os.path.getmtime(duel) < os.path.getmtime(menu)):
+            # (tools/lib/duelstate.py's duel, from this boot's menu: an older one holds an older disc layout)
+            subprocess.run([sys.executable, '-P', '-E', os.path.join(ROOT, 'tools', 'lib', 'duelstate.py'), '--disc', disc,
+                            '--out', duel], check=True, capture_output=True, timeout=a.timeout)
         r = subprocess.run([sys.executable, '-P', '-E', os.path.abspath(__file__), 'run', disc, f, '--out', out],
                            capture_output=True, text=True, timeout=a.timeout)
         log = (r.stdout + r.stderr).strip()
@@ -250,11 +257,11 @@ def cmd_window(a):
             core.save_state(state_path('quick'))
             stamp = datetime.datetime.now().strftime('%H%M%S')
             core.save_state(state_path(f'quick-{stamp}'))
-            say(f'saved states/quick.state (and quick-{stamp})')
+            say(f'saved build/states/quick.state (and quick-{stamp})')
         elif k == 'f4':
             if os.path.exists(state_path('quick')):
                 core.load_state(state_path('quick'))
-                say('loaded states/quick.state')
+                say('loaded build/states/quick.state')
         elif k == 'f12':
             os.makedirs(SHOTS, exist_ok=True)
             p = core.shot(os.path.join(SHOTS, datetime.datetime.now().strftime('shot-%Y%m%d-%H%M%S.png')))
@@ -265,6 +272,8 @@ def cmd_window(a):
         elif k == 'p':
             st['paused'] = not st['paused']
             say('paused' if st['paused'] else 'running')
+            if not st['paused']:
+                cushion()                              # (paused, pw-cat played its cushion out: choppy after)
         elif k == 'escape':
             root.destroy()
 
@@ -285,11 +294,15 @@ def cmd_window(a):
     # this loop never runs it dry (gaps and crackle). Only if the backlog
     # passes half a second (e.g. after a long stall) is audio dropped.
     max_queued = int(core.sample_rate * 4 * 0.50)
-    if audio:
-        try:
-            os.write(afd, bytes(int(core.sample_rate * 0.10) * 4))
-        except OSError:
-            pass
+    def cushion():
+        """100 ms of silence ahead of the game's sound: at the start, after a pause or a long stall (the
+        backlog played out, sound fed at exactly the game's pace ran dry at every jitter: choppy)."""
+        if audio:
+            try:
+                os.write(afd, bytes(int(core.sample_rate * 0.10) * 4))
+            except OSError:
+                pass
+    cushion()
 
     def queued():
         buf = array.array('i', [0])
@@ -318,6 +331,8 @@ def cmd_window(a):
         due = 8 if st['fast'] else max(0, min(4, int((now - st['next']) / frame_time) + 1))
         if now - st['next'] > 0.25:                        # long stall (window drag etc.): resync
             st['next'] = now
+            if not st['paused']:
+                cushion()
         if not st['paused']:
             core.buttons[0] = set(held)
             for _ in range(due):

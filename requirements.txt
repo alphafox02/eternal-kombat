@@ -1,4 +1,7 @@
-# What tools/build.py needs to turn your discs into the Eternal Kombat disc.
-# Plain Python plus Pillow and numpy (art conversion). No emulator needed.
+# What tools/build.py needs to turn your discs (and the MK captures made from
+# them: see the README) into the Eternal Kombat disc. No emulator needed to build.
 Pillow>=9.0
 numpy>=1.21
+scipy>=1.7           # art: shapes and regions of MK poses
+unicorn>=2.0         # 68000 emulator: runs EC's own sprite unpacker at build time
+capstone>=5.0        # 68000 disassembler: checks patch sites

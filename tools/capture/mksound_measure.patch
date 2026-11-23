@@ -1,0 +1,164 @@
+--- a/core/eklog.c
++++ b/core/eklog.c
+@@ -0,0 +1,13 @@
++/* Eternal Kombat research: a log of what the game does with the Sega CD's
++   PCM chip and CD-DA, for tools/mksound_measure.py (opened by retro_ek_log). */
++#include <stdio.h>
++#include <stdlib.h>
++#include <stdarg.h>
++long long ek_pcm_ticks = 0, ek_frame = 0;
++static FILE *ek_fp = NULL;
++int ek_on(void) { return ek_fp != NULL; }
++void ek_printf(const char *fmt, ...) { va_list ap; if (!ek_fp) return; va_start(ap, fmt); vfprintf(ek_fp, fmt, ap); va_end(ap); }
++void ek_flush(void) { if (ek_fp) fflush(ek_fp); }
++/* path: start logging there; NULL: stop */
++void retro_ek_log(const char *path) { if (ek_fp) fclose(ek_fp); ek_fp = path ? fopen(path, "w") : NULL; }
++void retro_ek_mark(const char *t) { if (ek_fp) { fprintf(ek_fp, "M %lld %s\n", ek_frame, t); fflush(ek_fp); } }
+--- a/core/eklog.h
++++ b/core/eklog.h
+@@ -0,0 +1,8 @@
++#ifndef EKLOG_H
++#define EKLOG_H
++extern int ek_on(void);
++extern void ek_printf(const char *fmt, ...);
++extern void ek_flush(void);
++extern long long ek_pcm_ticks;
++extern long long ek_frame;
++#endif
+--- a/core/system.c
++++ b/core/system.c
+@@ -41,6 +41,7 @@
+ 
+ #include "shared.h"
+ #include "eq.h"
++#include "eklog.h"
+ 
+ /* Global variables */
+ t_bitmap bitmap;
+@@ -151,6 +152,7 @@
+ void audio_reset(void)
+ {
+   int i;
++  if (ek_on()) ek_printf("R %lld\n", ek_frame);
+ 
+   /* Clear blip buffers */
+   for (i=0; i<3; i++)
+@@ -209,7 +211,13 @@
+ #endif
+ 
+     /* resample & mix FM/PSG, PCM & CD-DA streams to output buffer */
+-    blip_mix_samples(snd.blips[0], snd.blips[1], snd.blips[2], buffer, size);
++    {
++      extern long long ek_blip0_abs;
++      ek_blip0_abs = 0;
++      blip_mix_samples(snd.blips[0], snd.blips[1], snd.blips[2], buffer, size);
++      if (ek_on()) { ek_printf("F %lld %d %lld %lld\n", ek_frame, size, ek_pcm_ticks, ek_blip0_abs); ek_flush(); }
++      ek_frame++;
++    }
+   }
+   else
+   {
+--- a/core/cd_hw/pcm.c
++++ b/core/cd_hw/pcm.c
+@@ -36,6 +36,7 @@
+  *
+  ****************************************************************************************/
+ #include "shared.h"
++#include "eklog.h"
+ 
+ #define PCM_SCYCLES_RATIO (384 * 4)
+ 
+@@ -106,6 +107,14 @@
+   load_param(&pcm.status, sizeof(pcm.status));
+   load_param(&pcm.index, sizeof(pcm.index));
+   load_param(pcm.ram, sizeof(pcm.ram));
++  if (ek_on()) {
++    int k;
++    ek_printf("PL %d %d %d %d %d %d", pcm.out[0], pcm.out[1], pcm.enabled, pcm.status, pcm.index, (int)(pcm.bank - pcm.ram));
++    for (k = 0; k < 8; k++) ek_printf(" %u,%u,%u,%u,%u,%u", pcm.chan[k].addr, pcm.chan[k].st, pcm.chan[k].ls.w, pcm.chan[k].fd.w, pcm.chan[k].env, pcm.chan[k].pan);
++    ek_printf("\nPRAM ");
++    for (k = 0; k < 0x10000; k++) ek_printf("%02x", pcm.ram[k]);
++    ek_printf("\n");
++  }
+ 
+   return bufferptr;
+ }
+@@ -209,6 +218,7 @@
+ 
+   /* update PCM master clock counter */
+   pcm.cycles += length * PCM_SCYCLES_RATIO;
++  ek_pcm_ticks += length;
+ }
+ 
+ void pcm_update(unsigned int samples)
+@@ -237,9 +247,7 @@
+     pcm_run(clocks);
+   }
+ 
+-#ifdef LOG_PCM
+-  error("[%d][%d]PCM write %x -> 0x%02x (%X)\n", v_counter, s68k.cycles, address, data, s68k.pc);
+-#endif
++  if (ek_on()) ek_printf("W %lld %x %x %x\n", ek_pcm_ticks, address, data, (unsigned)(pcm.bank - pcm.ram));
+ 
+   /* external RAM is mapped to $1000-$1FFF */
+   if (address >= 0x1000)
+@@ -401,6 +409,12 @@
+   /* PCM-RAM destination address*/
+   uint16 dst_index = (scd.regs[0x0a>>1].w << 2) & 0xffe;
+ 
++  if (ek_on()) {
++    unsigned k;
++    ek_printf("D %lld %x %x %u ", ek_pcm_ticks, (unsigned)(pcm.bank - pcm.ram), dst_index, words);
++    for (k = 0; k < words; k++) { uint16 w = *(uint16 *)(cdc.ram + ((src_index + 2*k) & 0x3ffe)); ek_printf("%02x%02x", w & 0xff, w >> 8); }
++    ek_printf("\n");
++  }
+   /* update DMA destination address */
+   scd.regs[0x0a>>1].w += (words >> 1);
+ 
+--- a/core/cd_hw/cdd.c
++++ b/core/cd_hw/cdd.c
+@@ -36,6 +36,7 @@
+  *
+  ****************************************************************************************/
+ #include "shared.h"
++#include "eklog.h"
+ 
+ #if defined(USE_LIBTREMOR) || defined(USE_LIBVORBIS)
+ #define SUPPORTED_EXT 20
+@@ -257,6 +258,7 @@
+   load_param(&cdd.scanOffset, sizeof(cdd.scanOffset));
+   load_param(&cdd.volume, sizeof(cdd.volume));
+   load_param(&cdd.status, sizeof(cdd.status));
++  if (ek_on()) ek_printf("CL %d %d %d %d %d %d\n", cdd.index, cdd.lba, cdd.volume, cdd.status, cdd.audio[0], cdd.audio[1]);
+ 
+   /* adjust current LBA within track limit */
+   lba = cdd.lba;
+@@ -1277,6 +1279,7 @@
+ 
+     /* CD-DA fader volume setup (0-1024) */
+     int endVol = scd.regs[0x34>>1].w >> 4;
++    if (ek_on()) ek_printf("C %lld %d %d %ld %d %d %d %d\n", ek_frame, cdd.index, samples, cdStreamTell(cdd.toc.tracks[cdd.index].fd), curVol, endVol, prev_l, prev_r);
+ 
+     /* read samples from current block */
+ #if defined(USE_LIBCHDR)
+@@ -1471,6 +1474,7 @@
+   else
+   {
+     /* no audio output */
++    if (ek_on()) ek_printf("C0 %lld %d %d %d %d %d\n", ek_frame, cdd.index, samples, scd.regs[0x36>>1].byte.h, prev_l, prev_r);
+     if (prev_l | prev_r)
+     {
+       blip_add_delta_fast(snd.blips[2], 0, -prev_l, -prev_r);
+--- a/core/sound/blip_buf.c
++++ b/core/sound/blip_buf.c
+@@ -328,8 +328,10 @@
+ 	return count;
+ }
+ 
++long long ek_blip0_abs = 0;
+ int blip_mix_samples( blip_t* m1, blip_t* m2, blip_t* m3, short out [], int count)
+ {
++  { int k; for (k = 0; k < count + 18; k++) { ek_blip0_abs += abs(m1->buffer[0][k]) + abs(m1->buffer[1][k]); } }
+ #ifdef BLIP_ASSERT
+   assert( count >= 0 );
+ 

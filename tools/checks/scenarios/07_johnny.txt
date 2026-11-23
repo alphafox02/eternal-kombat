@@ -1,0 +1,68 @@
+# Pick Johnny Cage as player 1: Zuni's slot (MON, id 18), 19 presses right on the select grid;
+# then a 1-player fight against the CPU with random play (as 06_raiden).
+load menu
+press start
+wait 240
+press start
+wait 240
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press right
+wait 20
+press start
+wait 300
+shot 1-versus
+press start
+wait 400
+shot 2-stage
+press start
+wait 300
+shot 3-intro
+wait 120
+shot 4-intro2
+wait 180
+shot 5-fight-start
+wait 120
+expect-change
+shot 6-idle
+save johnny_fight
+mash 300 3
+expect-change
+shot 7-mash
+mash 600 4
+expect-change
+shot 8-mash2

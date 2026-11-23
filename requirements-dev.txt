@@ -1,5 +1,7 @@
-# Research and testing instruments, not needed to build.
+# On top of requirements.txt: the emulator, for playing, the checks and the research
+# tools (tools/prepare.py and tools/build.py don't need it).
 -r requirements.txt
-capstone>=5.0        # 68000 disassembler (tools/ecdis.py)
-unicorn>=2.0         # 68000 emulator: runs EC's own sprite unpacker (tools/ecsprite.py)
-stable-retro>=1.0    # ships the Genesis Plus GX libretro core tools/scd.py drives
+capstone>=5.0        # 68000 disassembler (tools/dev/ecdis.py)
+unicorn>=2.0         # 68000 emulator: runs EC's own sprite unpacker (tools/dev/ecsprite.py)
+stable-retro==1.0.1  # ships the Genesis Plus GX libretro core tools/scd.py drives (pinned: the
+                     #  sounds in data/mk_sound were measured on this core)

@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+"""The spear, from near to its full reach, pulls the victim in and dazes him.
+
+(mkinputs.SPEAR_TICKS, PULL_SPEED, r_drag.) Scorpion (player 1) and Reptile (player 2) against Shadow,
+from 70, 110 and 140 px. Each throw must hit, pull the victim in (within PULL_GAP + 8 px) and daze
+him, the daze starting within 46 frames of the hit: EC's hit reaction lets him go ~48 frames after
+it, and a yank still going then lets him walk free (the hold's limit: mk_fidelity_spec 6). Also the
+hold: Scorpion on his rope frames (42:30/31) at least 20 frames (Reptile's are his own sheet's).
+
+    spearcheck.py [--disc CUE]     (run after play.py test has made the disc's build/states/menu.state)
+"""
+import argparse, os, subprocess, sys, tempfile
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))   # (the library: tools/lib/)
+import scd
+import mkinputs
+from inputs import ROOT
+
+P1, P2 = 0x2E188, 0x2E330
+W = lambda r, o: int.from_bytes(r[o:o + 2], 'big', signed=True)
+GAPS = (70, 110, 140)
+LIMIT = 46
+HOLD = {mkinputs.fr(0x4230), mkinputs.fr(0x4231)}
+
+
+def throw(disc, st, thrower, gap):
+    """One spear from gap px: (hit, daze start, frames on the rope's hold, the gap after) - frames from the press."""
+    victim = P1 if thrower == P2 else P2
+    port, back = (0, 'left') if thrower == P1 else (1, 'right')
+    c = scd.Core()
+    c.load(disc)
+    c.load_state(st)
+    c.run(30)
+    r = c.prg_ram()
+    d = W(r, thrower + 0xB2) + (gap if thrower == P1 else -gap) - W(r, victim + 0xB2)
+    for o in (0xB2, 0x4E):
+        c.poke_prg(victim + o, ((W(r, victim + o) + d) & 0xFFFF).to_bytes(2, 'big'))
+    c.run(20)
+    hit = daze = None
+    hold, t = 0, 0
+    for b, n in [({back}, 3), (set(), 2), ({back}, 3), ({'x'}, 4), (set(), 200)]:
+        c.buttons[port] = set(b)
+        for _ in range(n):
+            c.run(1)
+            t += 1
+            r = c.prg_ram()
+            s = W(r, victim + 0xBE) & 0x7FFF
+            if hit is None and mkinputs.HIT_FIRST <= s <= mkinputs.HIT_LAST:
+                hit = t
+            if hit is not None and daze is None and s == mkinputs.DIZZY:
+                daze = t
+            hold += (W(r, thrower + 0xBE) & 0x7FFF) == mkinputs.SPEAR_MOVE and (W(r, thrower + 0x1A) & 0xFFFF) in HOLD
+            if daze is not None and t > daze + 20:
+                return hit, daze, hold, abs(W(r, thrower + 0xB2) - W(r, victim + 0xB2))
+    return hit, daze, hold, abs(W(c.prg_ram(), thrower + 0xB2) - W(c.prg_ram(), victim + 0xB2))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--disc', default=os.path.join(ROOT, 'build', 'Eternal Kombat', 'Eternal Kombat.cue'))
+    a = ap.parse_args()
+    bad = []
+    with tempfile.TemporaryDirectory(dir=os.path.join(ROOT, 'build')) as tmp:
+        for name, thrower, args in (('Scorpion', P1, ['--p1', '20', '--p2', '0']),
+                                    ('Reptile', P2, ['--p1', '0', '--p2', '0', '--p2-id', '26', '--unlock', '26'])):
+            st = os.path.join(tmp, name + '.state')
+            subprocess.run([sys.executable, '-P', '-E', os.path.join(ROOT, 'tools', 'lib', 'duelstate.py'), '--disc', a.disc,
+                            '--stage', '11', '--out', st] + args, check=True, capture_output=True)
+            for gap in GAPS:
+                hit, daze, hold, after = throw(a.disc, st, thrower, gap)
+                print(f'{name} from {gap} px: hit at {hit}, dazed at {daze}'
+                      f'{f" ({daze - hit} after the hit)" if hit and daze else ""}'
+                      f'{f", on the rope {hold} frames" if name == "Scorpion" else ""}, '
+                      f'{after} px apart')
+                if hit is None:
+                    bad.append(f'{name} from {gap} px: no hit')
+                elif daze is None or daze - hit > LIMIT:
+                    bad.append(f'{name} from {gap} px: not dazed within {LIMIT} frames of the hit (he walks free)')
+                elif after > mkinputs.PULL_GAP + 8:
+                    bad.append(f'{name} from {gap} px: left {after} px away')
+                if name == 'Scorpion' and hold < 20:
+                    bad.append(f'{name} from {gap} px: the rope held {hold} frames (MK ~35, ours 22)')
+    for b in bad:
+        print('FAIL:', b)
+    print('spearcheck:', 'FAIL' if bad else 'ok')
+    sys.exit(1 if bad else 0)
+
+
+if __name__ == '__main__':
+    main()

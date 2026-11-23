@@ -1,7 +1,9 @@
 # ---- Commercial game data: NEVER commit ----
 # Your own disc rips go in roms/ (any layout; see tools/checkinputs.py).
-roms/
-bios/
+roms/*
+!roms/README.md
+bios/*
+!bios/README.md
 *.bin
 *.cue
 *.iso
@@ -13,13 +15,8 @@ bios/
 
 # ---- Generated from your discs ----
 extracted/
+# (the disc, and the emulator's output: build/states, shots, runs, saves)
 build/
-
-# ---- Emulator output ----
-states/
-saves/
-shots/
-runs/
 
 __pycache__/
 *.pyc
