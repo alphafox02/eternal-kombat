@@ -275,6 +275,24 @@ def title_text(ec, sources):
     ec.patch_file('BACKUP.CO', 0x312, new, expect=old)
 
 
+SAVE_NAME = b'ETERNAL_CD_', b'ETERNALKOMB'   # (BRAM file names: 11 characters, A-Z 0-9 _)
+
+
+@patch('save-file', "The game's own save in backup RAM (ETERNALKOMB), not EC's ETERNAL_CD_")
+def save_file(ec, sources):
+    """EC keeps its save (the select screen's unlock mask $1CC8(a6), $14A4(a6) and the options) in the
+    Sega CD's backup RAM as ETERNAL_CD_, written by SUB.BIN $7608 and read back at boot by BACKUP.CO
+    ($136: move.l (a1),$1CC8(a6)). On a console that has played EC, its save would load over this
+    game's unlock mask: no MK fighters and no Blast on the select screen (seen on real hardware; the
+    emulator's backup RAM never held an EC save). Under its own name the game starts from its own
+    defaults, and EC's save is left alone. The name is in SUB.BIN ($765E, $766C) and BACKUP.CO
+    ($18E, $19C)."""
+    old, new = SAVE_NAME
+    for name, offs in (('SUB.BIN', (0x765E - 0x6000, 0x766C - 0x6000)), ('BACKUP.CO', (0x18E, 0x19C))):
+        for o in offs:
+            ec.patch_file(name, o, new, expect=old)
+
+
 @patch('title-logo', "The title screen's logo says ETERNAL KOMBAT (EC's own letters, rearranged; ectitle.py)")
 def title_logo(ec, sources):
     import ectitle
