@@ -65,6 +65,32 @@ Play the cue in any Sega CD emulator (Genesis Plus GX, PicoDrive, ares), with
 `tools/play.py window` (below), or burn it to a CD-R ([on a real Sega CD](#on-a-real-sega-cd)). For the 32X portraits, `tools/build.py --32x` and an emulator with
 Sega CD + 32X (PicoDrive, ares).
 
+## Controls
+
+Both casts use the same pad; the buttons mean MK's moves for MK fighters and Eternal Champions'
+for its own. With a six-button pad and Controller Setup as it starts:
+
+| Button | MK fighters | Eternal Champions fighters |
+|---|---|---|
+| X | low punch | punch (Straight) |
+| Y | high punch | punch (Lunge) |
+| Z | **block** | punch (Swing) |
+| A | low kick | kick (Snap) |
+| B | high kick | kick (Thrust) |
+| C | roundhouse | kick (Wheel) |
+| hold back | walks back, and blocks an attack | walks back, and blocks an attack |
+
+For MK fighters:
+- **Blocking:** hold Z as in MK, or hold back as in Eternal Champions; down + Z blocks low.
+- **Down + X or Y** is the uppercut; **down + A or B** the low kick; **down + C** the sweep.
+- **Close, toward + Y** throws.
+- **Special moves and fatalities** take MK CD's own motions with these buttons (Z where MK says
+  Block). For example, Scorpion's spear is back, back + X.
+
+**Three-button pad:** A, B and C are the kicks (low kick, high kick, roundhouse for MK fighters),
+and Start + A, B or C the punches and Z: Start + A low punch, Start + B high punch, Start + C block.
+Holding back blocks too.
+
 ## Where things are
 
 | | |

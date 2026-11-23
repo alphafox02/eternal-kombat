@@ -119,6 +119,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `finishmusiccheck.py` | An unfinished FINISH HIM must not run into the fatality music. |
 | `flykickcheck.py` | Liu Kang's flying kick (forward, forward + HK): travelling within 6 frames of HK and kicking within 10, as MK's (it stood 12 frames first). |
 | `gruntcheck.py` | MK's grunts: an MK fighter grunts once as he leaves the floor on a jump; punches, kicks and EC fighters don't. |
+| `icecheck.py` | Sub-Zero's ice blast freezes, and a blocked one doesn't (as on MK CD). |
 | `jumpcheck.py` | MK's jumps (patches.mk_jump_height, mkinputs.jump_up_launch): straight up as long in the air as MK's, forward / back at EC's gravity and MK's height, a jump kick lands with the jump. |
 | `kanoheadcheck.py` | Check Kano's close punches in a real duel on either player side. |
 | `kanoknifecheck.py` | Check Kano's held-Block knife input on either player side. |

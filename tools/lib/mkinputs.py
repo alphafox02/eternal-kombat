@@ -3493,6 +3493,12 @@ def emit_freeze(a):
     a.w(0x4268, 0x0002)                  # clr.w 2(a0)          (MK: frozen at once, no hit reaction)
     a.w(0x4AAA, 0x0008)                  # tst.l 8(a2)          (never seen standing: leave him)
     a.bccw(0x67, 'fz_x')
+    a.w(0x302B, 0x00BE)                  # move.w $BE(a3),d0    blocked it (EC's block, standing 7 or
+    a.w(0x0240, 0x7FFF)                  # andi.w #$7FFF,d0      crouching $C: EC calls the hit back for a
+    a.w(0x0C40, 0x0007)                  # cmpi.w #7,d0          blocked shot too): as MK, no freeze
+    a.bccw(0x67, 'fz_x')
+    a.w(0x0C40, 0x000C)                  # cmpi.w #$C,d0
+    a.bccw(0x67, 'fz_x')
     a.w(0x357C, 0x0001, 0x0002)          # move.w #1,2(a2)
     a.w(0x34BC, FZ_CALLS)                # move.w #calls,(a2)
     a.w(0x254B, 0x0004)                  # move.l a3,4(a2)

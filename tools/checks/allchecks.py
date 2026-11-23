@@ -20,6 +20,7 @@ re-saves build/states/menu.state. In parallel where it can be (--jobs). Among th
     portrait, Sub-Zero's turned green, not Shang's (tools/checks/versuscheck.py)
   - MK's jumps: straight up as long in the air as MK's, forward / back as before (tools/checks/jumpcheck.py)
   - Z blocks: standing and crouching, as MK's Block (tools/checks/blockcheck.py)
+  - Sub-Zero's ice blast freezes, a blocked one doesn't (tools/checks/icecheck.py)
   - the spear's sounds: the victim's scream at the hit, GET OVER HERE at the yank - Scorpion's and
     Reptile's (tools/checks/spearsoundcheck.py); Scorpion's spear on a jumping Kano never hangs (tools/checks/airspearcheck.py);
     both spears from 70 px to their full reach pull the victim in and daze him (tools/checks/spearcheck.py)
@@ -110,6 +111,7 @@ def main():
                run('sound banks load whole', PY + [T('soundbankcheck.py')]),
                run("MK captures not cut by MK's screen", PY + [T('mkunclip.py'), '--check']),
                run('Z blocks (MK Block)', PY + [T('blockcheck.py')]),
+               run('ice blast: freezes, not when blocked', PY + [T('icecheck.py')]),
                run('spear sounds', PY + [T('spearsoundcheck.py')]),
                run('spear on a jumper (no hang)', PY + [T('airspearcheck.py')]),
                run('spear from near to full reach: pulled in, dazed', PY + [T('spearcheck.py')]),
