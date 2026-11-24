@@ -90,7 +90,7 @@ def main():
         move('jump kick', [(['up'], 4), ([], 12), (['c'], 4)])
         if a.fighter == 'johnny':
             to(60)
-            move('split punch (down + Z)', [(['down'], 6), (['down', 'z'], 4), (['down'], 30)], after=60)
+            move('split punch (down + B)', [(['down'], 6), (['down', 'b'], 4), (['down'], 30)], after=60)
         # MK1's special inputs (mkinputs.GENERIC_MOVES); EC: X = MK low punch, A = low kick
         specials = {
             'raiden': [('lightning (down, forward + X)', [(['down'], 3), ([], 2), (['fwd'], 3), (['x'], 4)], 100),
@@ -104,8 +104,9 @@ def main():
                         ('flying kick (forward, forward + B)', [(['fwd'], 3), ([], 2), (['fwd'], 3), (['b'], 4)], 200)],
             'kano': [('knife (hold Z, back, forward)', [(['z'], 12), (['z', 'back'], 6), (['z'], 3),
                                                        (['z', 'fwd'], 6)], 100),
-                     ('cannonball (forward, down, back)', [(['fwd'], 3), ([], 2), (['down'], 3), ([], 2), (['back'], 3)], 200)],
-            'sonya': [('energy rings (Y, back, Y)', [(['y'], 3), ([], 20), (['back'], 3), ([], 2), (['y'], 4)], 100),
+                     ('cannonball (forward, down, back, up)', [(['fwd'], 3), ([], 2), (['down'], 3), ([], 2), (['back'], 3),
+                                                               ([], 2), (['up'], 3)], 200)],
+            'sonya': [('energy rings (Y, back, Y)', [(['y'], 4), ([], 2), (['back'], 4), ([], 2), (['y'], 4)], 100),
                       ('square-wave flight (forward, back + Y)', [(['fwd'], 3), ([], 2), (['back'], 3), (['y'], 4)], 200),
                       ('leg grab (close: down + X + A + Z)', [(['down', 'x', 'a', 'z'], 6)], 45)],
         }[a.fighter]
@@ -113,17 +114,17 @@ def main():
             to(dist)
             move(name, steps, after=240 if 'freezes' in name else 120)
         to(30)
-        move('throw (close, toward + Y)', [(['fwd', 'y'], 4)], after=120)
+        move('throw (close, B)', [(['b'], 4)], after=120)
     else:
         for name, b in (('low punch (X)', 'x'), ('high punch (Y)', 'y'), ('low kick (A)', 'a'),
                         ('high kick (B)', 'b'), ('roundhouse (C)', 'c')):
-            to(55)
+            to(70 if b == 'b' else 55)       # (B nearer than that is the throw)
             move(name + ': MK\'s full animation', [([b], 4), ([], 40)], after=30)
         for name, b in (('crouch: uppercut (down + Y)', 'y'), ('crouch: low kick (down + A)', 'a')):
             to(50)
             move(name, [(['down'], 8), (['down', b], 4), (['down'], 30)], after=60)
         to(30)
-        move('throw (close, toward + Y): MK\'s roll throw, she lands behind him', [(['fwd', 'y'], 4)], after=120)
+        move('throw (close, B): MK\'s roll throw, she lands behind him', [(['b'], 4)], after=120)
         to(70)
         move('jump + low kick', [(['up'], 4), ([], 12), (['a'], 4)])
         to(70)

@@ -109,10 +109,12 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 |---|---|
 | `airspearcheck.py` | Scorpion's spear on a jumping Kano must not hang the game. |
 | `allchecks.py` | Every check, for every MK fighter, on the current build (run after tools/build.py; it starts with the test suite, which boots the new disc and re-saves build/states/menu.state). |
+| `backkickcheck.py` | MK fighters' back + B is the roundhouse and back + A the sweep (as MK CD's away + kick), both sides; C, down + C, A, B as before; Sub-Zero's slide; a CPU fight unchanged. |
 | `blockcheck.py` | Does Z block for an MK fighter? |
 | `contestcheck.py` | One-player Contest (the ladder) with a fighter: does it run from match to match without freezing? |
 | `dazecheck.py` | An MK fighter's FINISH HIM daze: MK's 7-pose sway (mkinputs.DAZE_FRAMES at MK's timing, DAZE_SEQ: ~10 frames a pose, looped). |
 | `deadscriptcheck.py` | MK fighters in random fights: a fighter's running script is never one of Blade's that his block replaces (the build keeps code in their bodies). |
+| `eitherpunchcheck.py` | The MK specials that name a punch come out with X and with Y (as on MK CD), each fighter's other specials, punches and uppercuts as before, on both sides; the CPU's fighter reads none of it. |
 | `feetcheck.py` | MK's FEETLAND once at each landing of a jump (forward, straight up and back), never while walking. |
 | `fightcheck.py` | Does a fight run without freezing? |
 | `finishercheck.py` | Unit-test the built disc's finisher checks for MK losers (Cinekill, stage Sudden Death) on a 68000 under unicorn. |
@@ -121,8 +123,10 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `gruntcheck.py` | MK's grunts: an MK fighter grunts once as he leaves the floor on a jump; punches, kicks and EC fighters don't. |
 | `icecheck.py` | Sub-Zero's ice blast freezes, and a blocked one doesn't (as on MK CD). |
 | `jumpcheck.py` | MK's jumps (patches.mk_jump_height, mkinputs.jump_up_launch): straight up as long in the air as MK's, forward / back at EC's gravity and MK's height, a jump kick lands with the jump. |
+| `kanoballcheck.py` | Kano's cannonball on MK CD's full circle (toward, down, away, up; Block held or not), not on three of the taps or another order; his knife only with Block held; both sides; the CPU's Kano never runs the recogniser. |
 | `kanoheadcheck.py` | Check Kano's close punches in a real duel on either player side. |
 | `kanoknifecheck.py` | Check Kano's held-Block knife input on either player side. |
+| `kickthrowcheck.py` | MK fighters throw with B (the high kick) up close, as MK CD, on both sides; toward + Y still throws; C, A, down + B don't; the CPU's fighters never run the code. |
 | `leggrabcheck.py` | Sonya's leg grab (MK CD: down + LP + LK + Block, close; here down + X + A + Z). |
 | `licensecheck.py` | Every tracked Python file has the MIT licence tag (SPDX) and LICENSE is there. |
 | `menumusiccheck.py` | The title left alone (4 min 55 s, until EC's intro video): EC's song, then MK's Mortal Monday music (MK CD track 20), never the fight cues after them on the track. |
@@ -134,10 +138,11 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `shadowkickcheck.py` | Check Johnny's shadow-kick pose, overflow object, hit and cleanup. |
 | `shangcheck.py` | Shang Tsung (fighter 11, the Contest's first boss) against MK's own Shang (tools/lib/mkshangref.py, docs/notes/2026-11.md). |
 | `soakcheck.py` | A long fight that must never freeze: Kano jumps in at the CPU's Reptile on the Pit, both healths kept full. |
-| `sonyainputcheck.py` | Sonya's specials from the pad: forward held + HP punches (not the square wave), forward, back + HP flies, back + HP rings, close forward + HP throws. |
+| `sonyainputcheck.py` | Sonya's specials from the pad, both sides: forward held + HP punches (not the square wave), forward, back + HP flies, HP, back, a punch throws the rings (MK CD's; back + HP alone doesn't), close forward + HP throws; the CPU's Sonya never runs the recogniser. |
 | `soundbankcheck.py` | Do the fight's sound banks load whole? |
 | `spearcheck.py` | The spear from near to its full reach: Scorpion's and Reptile's pull the victim in and daze him inside EC's hit stun; Scorpion's rope holds 20+ frames. |
 | `spearsoundcheck.py` | Does the spear sound as MK's? |
+| `splitpunchcheck.py` | Johnny Cage's split punch is down + B (MK CD's down + high kick) and his down + Z blocks, on both sides; the rest of his crouch and the others' down + B as before; the CPU's Johnny never runs the code. |
 | `squarewavecheck.py` | Sonya's square wave at MK's height: over a standing opponent, into a jumping one. |
 | `sweepcheck.py` | Each MK fighter's sweep (crouch, down + C) on Larcen: he falls where he stands (MK), not launched ~135 px (EC). |
 | `teleportcheck.py` | Exercise Raiden's teleport and Scorpion's teleport punch on either side. |

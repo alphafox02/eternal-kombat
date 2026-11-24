@@ -82,14 +82,30 @@ for its own. With a six-button pad and Controller Setup as it starts:
 
 For MK fighters:
 - **Blocking:** hold Z as in MK, or hold back as in Eternal Champions; down + Z blocks low.
-- **Down + X or Y** is the uppercut; **down + A or B** the low kick; **down + C** the sweep.
-- **Close, toward + Y** throws.
+- **Back + B** is the roundhouse and **back + A** the sweep, as MK's away + high kick and away + low
+  kick; C and down + C give them too.
+- **Down + X or Y** is the uppercut; **down + A or B** the low kick (Johnny Cage's down + B is his
+  split punch).
+- **Up close, B** throws, as MK CD's high kick; toward + Y throws too.
 - **Special moves and fatalities** take MK CD's own motions with these buttons (Z where MK says
-  Block). For example, Scorpion's spear is back, back + X.
+  Block). Where MK names a punch either punch does it, as on MK CD.
+
+| Fighter | Special moves | Fatality (at FINISH HIM) |
+|---|---|---|
+| Scorpion | spear: back, back + punch; teleport punch: down, back + punch | hold Z: up, up |
+| Raiden | lightning: down, toward + punch; torpedo: back, back, toward; teleport: down, up | toward, back, back, back + punch |
+| Johnny Cage | green bolt: back, toward + punch; shadow kick: back, toward + A; split punch: down + B | toward, toward, toward + punch |
+| Sub-Zero | ice blast: down, toward + punch; slide: back + A + B | toward, down, toward + punch |
+| Liu Kang | fireball: toward, toward + punch; flying kick: toward, toward + B | down, back, up, toward, down |
+| Kano | knife: hold Z: back, toward; cannonball: toward, down, back, up | back, back + punch |
+| Sonya | rings: Y, back, punch; square wave: toward, back + punch; leg grab: up close, down + X + A + Z | toward, toward, back, back + Z |
+
+(punch: X or Y)
 
 **Three-button pad:** A, B and C are the kicks (low kick, high kick, roundhouse for MK fighters),
 and Start + A, B or C the punches and Z: Start + A low punch, Start + B high punch, Start + C block.
-Holding back blocks too.
+Holding back blocks too. Everything works on three buttons, but a six-button pad is recommended
+for MK fighters, with block and both punches on their own buttons.
 
 ## Where things are
 

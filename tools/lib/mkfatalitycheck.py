@@ -25,7 +25,8 @@ from inputs import ROOT
 P1, P2 = 0x2E188, 0x2E330
 GRID = {'scorpion': 20, 'raiden': 7, 'subzero': 15, 'sonya': 16, 'liukang': 17, 'kano': 18, 'johnny': 19}   # (select-grid presses)
 # his MK fatality: taps ('fwd' / 'back' toward / away from her, 'down', 'up'),
-# then the button held with the last tap; held: buttons held through the taps
+# then the button held with the last tap; held: buttons held through the taps. A punch ('x' / 'y': EC's
+# X low, Y high) is either punch, as on MK CD: --other-punch presses the other one
 INPUTS = {
     'scorpion': dict(held=['z'], taps=['up', 'up'], button=None),       # hold Block, Up, Up (MK: the flame)
     'subzero': dict(held=[], taps=['fwd', 'down', 'fwd'], button='y'),  # the spine rip
@@ -33,7 +34,7 @@ INPUTS = {
     'raiden': dict(held=[], taps=['fwd', 'back', 'back', 'back'], button='y'),   # the electrocution
     'liukang': dict(held=[], taps=['down', 'back', 'up', 'fwd', 'down'], button=None),   # the uppercut (MK CD: no button)
     'sonya': dict(held=[], taps=['fwd', 'fwd', 'back', 'back'], button='z'),   # the kiss (MK's Block: EC Z)
-    'kano': dict(held=[], taps=['back', 'back'], button='x'),   # the heart rip (MK CD: B, B + LP)
+    'kano': dict(held=[], taps=['back', 'back'], button='x'),   # the heart rip (MK CD: B, B + a punch)
 }
 W = lambda r, a: int.from_bytes(r[a:a + 2], 'big')
 X = lambda r, o: int.from_bytes(r[o + 0x4E:o + 0x50], 'big', signed=True)
@@ -50,6 +51,8 @@ def main():
     ap.add_argument('--check-raiden-effects', action='store_true',
                     help="require Raiden's four victim-palette flashes and explosion droplets")
     ap.add_argument('--as-p2', action='store_true', help='he is player 2 (--p2 is then player 1, the loser)')
+    ap.add_argument('--other-punch', action='store_true',
+                    help="a punch in his input is the other punch (X for Y, Y for X: MK CD takes either); others' as they are")
     ap.add_argument('--stage', help='stage mode (hex, $11-$22: tools/lib/duelstate.py --stage); default the game\'s')
     ap.add_argument('--back', type=int, default=0, help='frames he walks away after FINISH HIM, before the input')
     ap.add_argument('--wait', type=int, default=30, help='frames from the daze to the input')
@@ -116,7 +119,9 @@ def main():
         run(a.back, ['left' if X(r, P2) > X(r, P1) else 'right'])
         r = c.prg_ram()
         print(f'walked away: {abs(X(r, P2) - X(r, P1))} px apart')
-    inp = INPUTS[a.who]
+    inp = dict(INPUTS[a.who])
+    if a.other_punch:
+        inp['button'] = {'x': 'y', 'y': 'x'}.get(inp['button'], inp['button'])
     for k, t in enumerate(inp['taps']):
         r = c.prg_ram()
         fwd = 'right' if X(r, P2) > X(r, P1) else 'left'

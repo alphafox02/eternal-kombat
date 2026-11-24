@@ -17,7 +17,8 @@ a freeze is a picture still for 20 s in spite of those.
         ending; the sheet shows it (a picture every 10 s). ok = the Dark Champion
         was met and the fighter's MK ending (patches.mk_endings) was loaded
     contestcheck.py GRID --ending --throws
-        the same, throwing the Dark Champion whenever next to him (his knockouts by MK throws)
+        the same, walking up to the Dark Champion and throwing him: only a throw knocks him out (his health
+        kept where a punch or kick can't)
 """
 import argparse, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))   # (the library: tools/lib/)
@@ -31,6 +32,7 @@ CUE = os.path.join(ROOT, 'build', 'Eternal Kombat', 'Eternal Kombat.cue')
 FROZEN = 1200
 LADDER = 0x30000 + 0x1C04                 # GAME.CO's $1C04(a6): the next opponent's place in the list
 THROWS_LANDED = set()                      # (--throws: seconds in which the Dark Champion was being thrown)
+THROW_HEALTH = 12                          # (--throws: his health before each blow - an MK throw takes 20, a punch 3 to 8)
 ATTACKS = [{'x'}, {'a'}, {'down', 'x'}, {'y'}, {'down', 'a'}, {'c'}, {'z'}, {'b'}]   # (Eternal blocks punches)
 
 
@@ -91,14 +93,18 @@ def contest(grid, matches, frames, sheet=None, frozen_state=None, ending=False, 
             if not opps or opps[-1] != r[P2 + 0x4D]:
                 opps.append(r[P2 + 0x4D])
             c.poke_prg(P1 + 0x76, b'\x00\x68')
-            if h2 > 3:
+            thrown = throws and r[P2 + 0x4D] == 25          # (the Dark Champion, to be thrown: kept on THROW_HEALTH,
+            if thrown and h2 != THROW_HEALTH:               #  so that a throw knocks him out and a punch or kick -
+                c.poke_prg(P2 + 0x76, THROW_HEALTH.to_bytes(2, 'big'))   # the throw's press from a step too far - doesn't)
+            elif not thrown and h2 > 3:
                 c.poke_prg(P2 + 0x76, b'\x00\x03')
             k = f % 24
             hit = ATTACKS[f // 24 % len(ATTACKS)] if ending else {'x'}
             toward = 'right' if W(r, P2 + 0x4E) > W(r, P1 + 0x4E) else 'left'   # (always right: the Dark Champion
             c.buttons[0] = {toward} if k < 12 else (hit if k < 15 else set())  #  teleports behind and was never reached)
-            if throws and r[P2 + 0x4D] == 25 and abs(W(r, P2 + 0x4E) - W(r, P1 + 0x4E)) < 70:
-                c.buttons[0] = {toward, 'y'} if k % 12 < 3 else {toward}      # next to him: the throw (toward + HP)
+            if thrown:                                      # walk up to him; next to him: the throw (toward + HP)
+                near = abs(W(r, P2 + 0x4E) - W(r, P1 + 0x4E)) < 70
+                c.buttons[0] = {toward, 'y'} if near and k % 12 < 3 else {toward}
                 if W(r, P2 + 0xBE) & 0x7FFF == 0x37:
                     throws_landed.add(f // 60)
         else:

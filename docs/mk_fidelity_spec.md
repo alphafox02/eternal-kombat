@@ -63,7 +63,8 @@ the throw-like one, then fix its capture/pose mapping.
 
 **Seen (Kano, sheets)**: close up, X and Y (EC $20/$21) are his MK headbutt (captured from MK
 CD: MK1's Kano headbutts with his close punches): he lurches in, head bent into the
-opponent - the likeliest "throw". (EC also throws on toward + Y up close.) To confirm in
+opponent - the likeliest "throw". (EC also throws on toward + Y up close; MK CD's own throw,
+the high kick up close, is B here: notes 2026-11-23.) To confirm in
 play; then the same sheets for the other six fighters, beside MK's.
 
 ### 0d. The Pit's music (fixed)

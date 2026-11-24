@@ -69,13 +69,16 @@ RAIDEN_ID = 19
 RTELE_MOVE = 0x31             # Blade's move $31: Raiden's teleport (its original spawn is skipped)
 CHORD = 0x4000                # in a move's button word: all these buttons held (not one pressed)
 DIR3 = 0x8000                 # in a move's button word: a third tap (DIR3 | direction), not a button
+TAP4 = 8                      # ... and a fourth after it: DIR3 | third | fourth << TAP4
+BTN1 = 0x8000                 # in a move's first word: a button press (BTN1 | buttons, any of them), not a tap
 LP, HP, LK, HK = 0x400, 0x200, 0x40, 0x10   # EC X, Y, A, B as mapped in scorpion_map
 BLOCK = 0x100                 # EC Z: MK's Block
+PUNCH = LP | HP               # either punch: MK CD's specials and fatalities that name one take both (measured, docs/notes/2026-11.md)
 
 # (dir1, dir2, button, EC move id): Scorpion's MK1 specials
 MK_MOVES = [
-    (BACK, BACK, LP, 0x34),      # spear: back, back + low punch (Blade's projectile move)
-    (DOWN, BACK, HP, 0x35),      # teleport punch: down, back + high punch
+    (BACK, BACK, PUNCH, 0x34),   # spear: back, back + a punch (Blade's projectile move)
+    (DOWN, BACK, PUNCH, 0x35),   # teleport punch: down, back + a punch
 ]
 
 SPEAR_MOVE = 0x34
@@ -152,7 +155,7 @@ MK_SHEET_BASE = {22: 0x85, 19: 0x72, 18: 0xD9, 20: 0xDD, 12: 0xE1, 13: 0xE5, 17:
 BLOOD_IDS = (22, 19, 18, 20, 12, 13, 17, 11, 26)
 CINEKILL_SITE = 0x14AA2       # PLYR: cmpi.w #$18,$76(a5); bgt: the Cinekill check (victim at most 24 health)
 SPLIT_STRIKE = 2              # his split punch's strike step (0-based; BLA.CO $43B4)
-SPLIT_MOVE = 0x10             # EC's down + Z (Blade's script): Johnny's split punch
+SPLIT_MOVE = 0x10             # EC's down + Z (Blade's script): Johnny's split punch (a human's: down + B, patches.controls_code)
 
 DRAG_SITES = ((0x1504E, 0x188E), (0x15210, 0x186E))   # input tasks P2, P1: lea x(a6),a3 ; tst.w $12A(a1)
 AI_SITES = (0x15120, 0x152E0)  # move.w $1D20(a6),$1634(a6): CPU's chosen special (P1, P2)
@@ -243,9 +246,14 @@ class Asm:
 # into PLYR.CO / the engine.
 
 def r_taps(a):
-    """Type $28 recogniser. a0 = args (dir1, dir2, button, move), d1 = slot,
+    """Type $28 recogniser. a0 = args (dir1, dir2, button, move: dir1 a tap or BTN1 | buttons;
+    button a press of any of its buttons, CHORD | buttons all held, DIR3 | a third tap
+    (| a fourth << TAP4), or 0), d1 = slot,
     a3 = progress table, a1 = fighter. Progress: high byte step, low byte
-    frames since the last step. Exits to NEXT or SUCCESS (d6 = move)."""
+    frames since the last step. Exits to NEXT or SUCCESS (d6 = move).
+    The first block found runs it for both fighters' lists (stubs' dispatch),
+    so every block's copy is the same; EC's recogniser returns before it for
+    the CPU's fighter (PLYR $159D0), so only a human's presses come here."""
     a.w(0x3029, 0x0162)                  # move.w $162(a1),d0   new presses
     a.w(0x0240, 0x000F)                  # andi.w #$F,d0        directions only
     a.w(0x0829, 0x0003, 0x0020)          # btst #3,$20(a1)      facing left?
@@ -257,8 +265,14 @@ def r_taps(a):
     a.label('t_nf')
     a.w(0x4A33, 0x1000)                  # tst.b (a3,d1.w)      step
     a.bcc(0x66, 't_s1')
-    a.w(0xB050)                          # cmp.w (a0),d0        first tap
+    a.w(0x3C10)                          # move.w (a0),d6       the first: a button (BTN1 | buttons) ...
+    a.bcc(0x6A, 't_p0')                  # bpl
+    a.w(0xCC69, 0x0162)                  # and.w $162(a1),d6    ... pressed? (new presses have no bit 15)
+    a.bcc(0x66, 't_st')
+    a.label('t_p0')
+    a.w(0xB050)                          # cmp.w (a0),d0        ... or a tap
     a.bcc(0x66, 't_next')
+    a.label('t_st')
     a.w(0x37BC, 0x0100, 0x1000)          # move.w #$0100,(a3,d1.w)
     a.bcc(0x60, 't_next')
     a.label('t_s1')
@@ -279,6 +293,13 @@ def r_taps(a):
     a.w(0xCC69, 0x0162)                  # and.w $162(a1),d6    button pressed?
     a.bcc(0x67, 't_tick')
     a.bcc(0x60, 't_ok')
+    a.label('t_tick')                    # (here, in the middle: in every short branch's reach)
+    a.w(0x5233, 0x1001)                  # addq.b #1,1(a3,d1.w)
+    a.w(0x0C33, 0x000C, 0x1001)          # cmpi.b #12,1(a3,d1.w)  12-frame window per step
+    a.bcc(0x6D, 't_next')
+    a.w(0x4273, 0x1000)                  # clr.w (a3,d1.w)
+    a.label('t_next')
+    a.jmp(NEXT)
     a.label('t_ch')
     a.w(0x0246, 0x0FF0)                  # andi.w #$FF0,d6      the buttons
     a.w(0x3F06)                          # move.w d6,-(sp)
@@ -291,20 +312,25 @@ def r_taps(a):
     a.w(0xBC5F)                          # cmp.w (sp)+,d6       all of them?
     a.bcc(0x66, 't_tick')
     a.label('t_d3')
+    a.w(0x0C33, 0x0003, 0x1000)          # cmpi.b #3,(a3,d1.w)  the third tap done: the fourth's turn
+    a.bcc(0x66, 't_d3a')
+    a.w(0xE04E)                          # lsr.w #8,d6
+    a.label('t_d3a')
     a.w(0x0246, 0x000F)                  # andi.w #$F,d6
     a.w(0xBC40)                          # cmp.w d0,d6          (d0: this frame's taps, facing-relative)
     a.bcc(0x66, 't_tick')
+    a.w(0x1C28, 0x0004)                  # move.b 4(a0),d6      a third tap with a fourth after it ($8n: TAP4)?
+    a.w(0xDC06)                          # add.b d6,d6
+    a.bcc(0x64, 't_ok')                  # bcc: a chord, not a tap
+    a.bcc(0x67, 't_ok')                  # beq: no fourth
+    a.w(0x0C33, 0x0003, 0x1000)          # cmpi.b #3,(a3,d1.w)  that was the fourth
+    a.bcc(0x67, 't_ok')
+    a.w(0x37BC, 0x0300, 0x1000)          # move.w #$0300,(a3,d1.w)
+    a.bcc(0x60, 't_next')
     a.label('t_ok')
     a.w(0x3C28, 0x0006)                  # move.w 6(a0),d6      move id
     a.w(0x4273, 0x1000)                  # clr.w (a3,d1.w)
     a.jmp(SUCCESS)
-    a.label('t_tick')
-    a.w(0x5233, 0x1001)                  # addq.b #1,1(a3,d1.w)
-    a.w(0x0C33, 0x000C, 0x1001)          # cmpi.b #12,1(a3,d1.w)  12-frame window per step
-    a.bcc(0x6D, 't_next')
-    a.w(0x4273, 0x1000)                  # clr.w (a3,d1.w)
-    a.label('t_next')
-    a.jmp(NEXT)
 
 
 def r_ai(a, keep=None):
@@ -2157,7 +2183,6 @@ def ext_block():
     low_jump(a, MK_DIR_BY_ID[SCORPION_ID])  # MK's jumps (r_jumpup): in his module's low room
     GEN_KD.clear()
     GEN_ROOM.clear()
-    GEN_ZF.clear()
     GEN_DEAD.clear()
     if SCORPION_ID in KD_FIGHTERS:
         low_kd(a, MK_DIR_BY_ID[SCORPION_ID])   # MK's knockdown (r_jumpup, r_drag): in a victory room
@@ -2700,15 +2725,17 @@ JUMP_LOW_END = 0x2E0              # (then patches.crouch_code: 104 bytes, to $34
 #                                   moved here for the jump's grunt)
 GEN_LOW = {}                      # generic_block -> {'off', 'data'}: written into his module by patches
 GEN_KD = {}                       # (the same for his knockdown drive: low_kd)
-GEN_ZF = {}                       # (room_put's third room: the low room after zf, which shrank to its Z filter)
-ZF_SIZE = 16                      # bytes of zf (patches.block_button_code) at LOW_OFF
+ZF_SIZE = 16                      # bytes of zf (patches.block_button_code) at LOW_OFF (the rest, to JUMP_LOW_OFF: free but
+#                                   in Sonya's, RINGS_AT - it was room_put's third room)
 GEN_ROOM = {}                     # (and tables in the second victory room: room_put)
-GEN_DEAD = {}                     # room_put's fourth room (generic_block): {'free': [(start, end)], 'pieces': [(off, data)]} -
+GEN_DEAD = {}                     # room_put's third room (generic_block): {'free': [(start, end)], 'pieces': [(off, data)]} -
 #   the bodies of Blade's move scripts (BLA.CO's chain from patches.CHAIN_START) for the slots his block
 #   installs its own scripts in every frame (generic_block: 'move.l script,4*id(a0)'): PLYR $1A278 reads
 #   a chain script's first two words (its slot and step count) to build the move table, and the block's
 #   scripts replace those entries, so the rest of each is never read (2026-11-22: a fighter's running
 #   script, $AE, never in them over 24,000 frames of random fights; deadscriptcheck.py)
+CTRL_ROOM = (0x47C8, 0x485C)      # the body of Blade's close punch script (move $20), dead in every MK module but Shang's
+#                                   (GEN_DEAD; Scorpion's too): kept for patches.controls_code, the same place in each
 MK_DIR_BY_ID = {22: 'mk_moves', KANO_ID: 'mk_moves_kano', JOHNNY_ID: 'mk_moves_johnny', LIUKANG_ID: 'mk_moves_liukang',
                 SONYA_ID: 'mk_moves_sonya', 20: 'mk_moves_subzero', 19: 'mk_moves_raiden', 26: 'mk_moves_subzero'}
 
@@ -3064,17 +3091,11 @@ def room_put(a, label, data, subs=None):  # (up to DAZE_PAD: the room's end is d
         kd += data
         if GEN_KD['off'] + len(kd) <= VROOM[0][1]:
             GEN_KD['data'] = bytes(kd)
-        else:                            # both victory rooms full: the low room after zf
-            if 'data' not in GEN_ZF:
-                GEN_ZF.update(off=LOW_OFF + ZF_SIZE, data=b'')
-            at = GEN_ZF['off'] + len(GEN_ZF['data'])
-            if at + len(data) <= JUMP_LOW_OFF:
-                GEN_ZF['data'] = bytes(GEN_ZF['data']) + data
-            else:                        # all three full: a dead script body of Blade's (GEN_DEAD) ...
-                at = dead_put(data)
-                if at is None:           # ... else after the block's code (flush_late)
-                    a.late = getattr(a, 'late', []) + [(label, data, subs or {})]
-                    return
+        else:                            # both victory rooms full: a dead script body of Blade's (GEN_DEAD) ...
+            at = dead_put(data)
+            if at is None:               # ... else after the block's code (flush_late)
+                a.late = getattr(a, 'late', []) + [(label, data, subs or {})]
+                return
     a.labels[label] = at - EXT_OFF
     for k, v in (subs or {}).items():
         a.labels[k] = at - EXT_OFF + v
@@ -3198,6 +3219,9 @@ def emit_airland(a):
     room_put(a, 'airland', r.build())
 
 
+RINGS_AT = LOW_OFF + ZF_SIZE          # in Sonya's module: patches.rings_code (the low room after zf, 64 bytes)
+
+
 def emit_zblock(a):
     """'zblock' (a1 = an MK fighter, from his drive at the start of his input task - before it reads his
     pad, PLYR $15228; uses nothing): MK's Block. A human player holding Z while the opponent attacks
@@ -3210,6 +3234,9 @@ def emit_zblock(a):
     r.w(0x4A69, 0x012A)                  # tst.w $12A(a1)      the CPU's: its own input
     r.bcc(0x66, 'zb_x')
     r.w(0x48E7, 0x40A0)                  # movem.l d1/a0/a2,-(sp)
+    if SCORPION_ID == SONYA_ID:          # (a human's Sonya: her rings out of her high punch, patches.rings_code)
+        r.w(0x2069, 0x018C)              # movea.l $18C(a1),a0 her module's code start (+$A)
+        r.w(0x4EA8, RINGS_AT - 10)       # jsr rings - $A(a0)
     r.w(0x41EE, 0x0A3A)                  # lea $A3A(a6),a0     his pad (player 1's ...
     r.w(0xB3FC); r.l(0x2E188)            # cmpa.l #P1,a1
     r.bcc(0x67, 'zb_p')
@@ -4456,7 +4483,7 @@ SZF_RIP_IN_MUSIC = 1.33       # s: MK's rip (her first headless frame) into its 
 SZF_FROM, SZF_TO, SZF_STEP = 144, 420, 6                 # capture frames (his stance before 144)
 SZF_PAUSE = round(((SZF_MUSIC_LAG + SZF_RIP_IN_MUSIC) * 60 - (170 - SZF_FROM)) / 2)   # calls (2 frames)
 SZF_GAP = 26                  # px between them when he grabs (MK: 24 between the captured centres, x1.08)
-SZF_TAPS = (FWD, DOWN, FWD)   # then HP (EC Y)
+SZF_TAPS = (FWD, DOWN, FWD)   # then a punch (EC X or Y)
 
 
 def szf_zframe(p):
@@ -5038,7 +5065,7 @@ FATALS = {
                    fxl=lambda: fxl_cached('sonya'), kiss=lambda: kiss_path('sonya')),   # her kiss over his head: an object
     KANO_ID: dict(taps=CAP_FATALS['kano']['taps'], gap=CAP_FATALS['kano']['gap'],
                   table=lambda: cap_table('kano'), hoff=lambda: cap_hoff('kano'), music='f_time_kn',
-                  head_base=lambda: 0, heads=False, move=True, bleed=False, button_bit=10),   # (LP: EC X)
+                  head_base=lambda: 0, heads=False, move=True, bleed=False),
     RAIDEN_ID: dict(taps=CAP_FATALS['raiden']['taps'], gap=CAP_FATALS['raiden']['gap'],
                     table=lambda: cap_table('raiden'), hoff=lambda: cap_hoff('raiden'), music='f_time_rd',
                     head_base=lambda: _head_base('raiden'), heads=False,    # (the head explodes)
@@ -5168,6 +5195,16 @@ def emit_gkok(a):
     room_put(a, 'gkok', r.build())
 
 
+def emit_gkbutton(a, F):
+    """Z clear if his fatality's button is down (d2: his buttons, new or held; d1 used): a punch, either
+    (MK CD: LP and HP both - EC X, Y); Sonya's: Block (EC Z, 'button_bit')."""
+    if 'button_bit' in F:
+        a.w(0x0802, F['button_bit'])     # btst #bit,d2
+    else:
+        a.w(0x3202)                      # move.w d2,d1
+        a.w(0x0241, PUNCH)               # andi.w #X+Y,d1
+
+
 def emit_gfatal(a):
     """In r_generic (a1 = him, a2 = vars; vars as Scorpion's: +24 running,
     +26 row, +28 calls in it, +30 him, +34 the loser, +38 her frame, +40 tap
@@ -5221,7 +5258,7 @@ def emit_gfatal(a):
         # EC reads that press as its throw, so take the direction from the held pad
         a.w(0x0C43, len(F['taps']) - 1)      # cmpi.w #2,d3
         a.bcc(0x66, 'gk_ntb')
-        a.w(0x0802, F.get('button_bit', 9))  # btst #bit,d2        the button (EC Y / Z) now
+        emit_gkbutton(a, F)                  # the button now
         a.bcc(0x67, 'gk_ntb')
         a.w(0x41EE, 0x0A3A)                  # lea $A3A(a6),a0     his held pad
         a.w(0xB3FC); a.l(0x2E188)            # cmpa.l #P1,a1
@@ -5248,7 +5285,7 @@ def emit_gfatal(a):
     a.bccw(0x66, 'gk_x')
     a.label('gk_btn')
     if F.get('button', 'y'):             # (Liu Kang's has none: the taps do it)
-        a.w(0x0802, F.get('button_bit', 9))   # btst #bit,d2   high punch (EC Y; Sonya's: Block, EC Z)
+        emit_gkbutton(a, F)
         a.bccw(0x67, 'gk_x')
     a.w(0x266A, 0x0034)                  # movea.l 52(a2),a3   the loser (dazed - or hit inside the
                                          #  window by his last press: r_finish keeps her on 1)
@@ -7127,23 +7164,24 @@ def emit_sq_lift(a):
 # projectile, $35 his dash. (dir1, dir2, button / DIR3|dir / 0, move)
 GENERIC_MOVES = {
     22: MK_MOVES,                        # Scorpion (the Senator's slot): spear, teleport punch (his full block runs r_gmoves too)
-    19: [(DOWN, FWD, LP, 0x34),          # Raiden: lightning (down, forward + LP)
+    19: [(DOWN, FWD, PUNCH, 0x34),       # Raiden: lightning (down, forward + a punch)
          (BACK, BACK, DIR3 | FWD, 0x35),  #   torpedo (back, back, forward)
          (DOWN, UP, 0, RTELE_MOVE)],      #   teleport (down, up): Blade's $31, a plain script, ours
-    18: [(BACK, FWD, LP, 0x34),          # Johnny Cage: green bolt (back, forward + LP)
+    18: [(BACK, FWD, PUNCH, 0x34),       # Johnny Cage: green bolt (back, forward + a punch)
          (BACK, FWD, LK, 0x35)],         #   shadow kick (back, forward + LK)
-    20: [(DOWN, FWD, LP, 0x34),          # Sub-Zero: ice blast (down, forward + LP)
+    20: [(DOWN, FWD, PUNCH, 0x34),       # Sub-Zero: ice blast (down, forward + a punch)
          (BACK, 0, CHORD | LK | HK, 0x35)],   #   slide (MK CD: back + LK + HK - back + LK + Block is a low kick): Blade's dash
-    12: [(FWD, FWD, HP, 0x34),           # Liu Kang: fireball (forward, forward + HP)
+    12: [(FWD, FWD, PUNCH, 0x34),        # Liu Kang: fireball (forward, forward + a punch)
          (FWD, FWD, HK, 0x35)],          #   flying kick (forward, forward + HK): Blade's dash
     13: [(BACK, FWD, CHORD | BLOCK, 0x34),   # Kano: knife throw (Block held: back, forward)
-         (FWD, DOWN, DIR3 | BACK, 0x35)],    #   cannonball (MK: Block held, a full circle; here forward, down, back)
-    17: [(FWD, BACK, HP, 0x35),          # Sonya: square-wave punch (forward, back + HP): Blade's dash
-         (BACK, 0, HP, 0x34)],           #   energy rings (MK CD: punch, back, punch - EC acts on a fresh
-                                         #  punch itself, so the first is her jab, as MK shows it: back, punch
-                                         #  fire them; checked after the square wave, which ends the same way)
+         (FWD, DOWN, DIR3 | BACK | UP << TAP4, 0x35)],   #   cannonball (MK CD's full circle: forward, down, back, up -
+                                             #  Block held or not; three of the four, or another order: nothing)
+    17: [(FWD, BACK, PUNCH, 0x35),       # Sonya: square-wave punch (forward, back + a punch): Blade's dash
+         (BTN1 | HP, BACK, PUNCH, 0x34)],   #   energy rings (MK CD: high punch, back, a punch - the first is her
+                                         #  jab, here as there; a low punch first, or back + a punch alone, are
+                                         #  not; checked after the square wave, which ends the same way)
     26: [(DOWN, FWD, LP, ICE_MOVE),      # Reptile (MK's CPU-only secret): Sub-Zero's ice blast (on $31),
-         (BACK, BACK, LP, 0x34),         #   Scorpion's spear (MK CD's Reptile throws both)
+         (BACK, BACK, LP, 0x34),         #   Scorpion's spear (MK CD's Reptile throws both; LP only, as they were)
          (BACK, 0, CHORD | LK | HK, 0x35)],   #   and Sub-Zero's slide
     11: [(BACK, FWD, HP, 0x34)],         # Shang Tsung: skull volley (MK: back, back, forward + HP; only the
                                          #  CPU plays him - this is for tests driving him as player 2)
@@ -7154,7 +7192,8 @@ def r_gmoves(a, fid):
     """A generic fighter's special-move list and his copy of Blade's move
     handler (as Scorpion's in SUB.BIN, build), in his block: 'g_reg' (a1 =
     him) fills the list's absolute entry pointers (his slot's) and points
-    the handler table's entry for his id at the handler."""
+    the handler table's entry for his id at the handler. An entry: level 0,
+    its progress slot, TYPE, then r_taps' four words."""
     moves = GENERIC_MOVES.get(fid, [])
     a.label('g_reg')
     if not moves:
@@ -7185,11 +7224,9 @@ def r_gmoves(a, fid):
     a.jmp(0x15404)
     a.label('gm_no')
     a.jmp(0x68CA)
-    a.label('gm_list')
-    a.out += bytes(4 * (len(moves) + 1))
-    for i, (d1, d2, btn, move) in enumerate(moves):
-        a.label(f'gm_e{i}')
-        a.out += struct.pack('>7H', 0, 2 * i, TYPE, d1, d2, btn, move)
+    room_put(a, 'gm_list', bytes(4 * (len(moves) + 1)))   # (the list and its entries in a room: his block's
+    for i, (d1, d2, btn, move) in enumerate(moves):       #  own bytes are r_taps' - Raiden's, Scorpion's are full)
+        room_put(a, f'gm_e{i}', struct.pack('>7H', 0, 2 * i, TYPE, d1, d2, btn, move))
 
 
 def generic_block(fid, sheet_shift, mk_dir, sounds=None):
@@ -7204,7 +7241,8 @@ def generic_block(fid, sheet_shift, mk_dir, sounds=None):
         co = open(os.path.join(ROOT, 'extracted', 'ec_us', 'BLA.CO'), 'rb').read()
         scripts = mkscripts.build(co, mk_dir)[0]
         GEN_DEAD.clear()                 # (his basic attacks' slots only: Blade's scripts the build edits stay out)
-        GEN_DEAD.update(free=dead_bodies(co, {int.from_bytes(sc[0:2], 'big') for sc in scripts.values()}), pieces=[])
+        GEN_DEAD.update(free=[b for b in dead_bodies(co, {int.from_bytes(sc[0:2], 'big') for sc in scripts.values()})
+                              if b != CTRL_ROOM], pieces=[])
         if fid == RAIDEN_ID:
             scripts[RTELE_MOVE] = rtele_plan(mk_dir)[0]
         if fid == REPTILE_ID:
@@ -7265,7 +7303,6 @@ def generic_block(fid, sheet_shift, mk_dir, sounds=None):
             low_jump(a, mk_dir)
         GEN_KD.clear()
         GEN_ROOM.clear()
-        GEN_ZF.clear()
         if fid in KD_FIGHTERS and fid in KD_LOW:
             low_kd(a, mk_dir)
         _block(a, False, fid, ('drag', 'jumpup', 'launch', 'taps', 'finish', 'ai'))
@@ -7459,7 +7496,7 @@ def build(plyr, blaco, sub_org):
     ext, offs = ext_block()
     if EXT_OFF + len(ext) > MORPH_MV:
         raise ValueError(f'extension block reaches ${MORPH_MV:X} (the slot end: Shang\'s morph vars, trampoline) by {EXT_OFF + len(ext) - MORPH_MV} bytes')
-    for piece in (GEN_LOW, GEN_KD, GEN_ROOM, GEN_ZF):   # (his jump drive, knockdown, hit tables: low_jump, low_kd, room_put)
+    for piece in (GEN_LOW, GEN_KD, GEN_ROOM):   # (his jump drive, knockdown, hit tables: low_jump, low_kd, room_put)
         if piece.get('data'):
             lo = piece['off']
             blaco = blaco[:lo] + piece['data'] + blaco[lo + len(piece['data']):]

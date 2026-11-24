@@ -7,8 +7,8 @@ re-saves build/states/menu.state. In parallel where it can be (--jobs). Among th
 
   - the test suite (tools/play.py test --no-build)
   - the finisher blocks (tools/checks/finishercheck.py)
-  - each MK fatality vs Shadow, as player 1 and as player 2 (tools/lib/mkfatalitycheck.py)
-    and in a mirror match won by player 2
+  - each MK fatality vs Shadow, as player 1 and as player 2 - there with the other punch, where his input
+    has one (tools/lib/mkfatalitycheck.py) - and in a mirror match won by player 2
   - each against the CPU and in a mirror match: no freeze (tools/checks/fightcheck.py)
   - the Pit's fall with each MK winner (tools/checks/pitcheck.py)
   - the one-player Contest with each: 10 matches, then to the end of the ladder
@@ -21,6 +21,10 @@ re-saves build/states/menu.state. In parallel where it can be (--jobs). Among th
   - MK's jumps: straight up as long in the air as MK's, forward / back as before (tools/checks/jumpcheck.py)
   - Z blocks: standing and crouching, as MK's Block (tools/checks/blockcheck.py)
   - Sub-Zero's ice blast freezes, a blocked one doesn't (tools/checks/icecheck.py)
+  - MK fighters' back + B is the roundhouse and back + A the sweep; the CPU's play unchanged (tools/checks/backkickcheck.py)
+  - MK fighters throw with B up close, as MK CD's high kick (tools/checks/kickthrowcheck.py)
+  - Johnny Cage's split punch on down + B, his down + Z a Block (tools/checks/splitpunchcheck.py)
+  - the specials that name a punch take either punch, as on MK CD (tools/checks/eitherpunchcheck.py)
   - the spear's sounds: the victim's scream at the hit, GET OVER HERE at the yank - Scorpion's and
     Reptile's (tools/checks/spearsoundcheck.py); Scorpion's spear on a jumping Kano never hangs (tools/checks/airspearcheck.py);
     both spears from 70 px to their full reach pull the victim in and daze him (tools/checks/spearcheck.py)
@@ -112,6 +116,10 @@ def main():
                run("MK captures not cut by MK's screen", PY + [T('mkunclip.py'), '--check']),
                run('Z blocks (MK Block)', PY + [T('blockcheck.py')]),
                run('ice blast: freezes, not when blocked', PY + [T('icecheck.py')]),
+               run('back + B roundhouse, back + A sweep', PY + [T('backkickcheck.py')]),
+               run('up close, B throws (MK CD\'s throw)', PY + [T('kickthrowcheck.py')]),
+               run("Johnny's split punch: down + B", PY + [T('splitpunchcheck.py')]),
+               run('specials with either punch', PY + [T('eitherpunchcheck.py')]),
                run('spear sounds', PY + [T('spearsoundcheck.py')]),
                run('spear on a jumper (no hang)', PY + [T('airspearcheck.py')]),
                run('spear from near to full reach: pulled in, dazed', PY + [T('spearcheck.py')]),
@@ -135,6 +143,7 @@ def main():
             ('Kano headbutt (P2)', PY + [T('kanoheadcheck.py'), '--as-p2']),
             ('Kano knife input (P1)', PY + [T('kanoknifecheck.py')]),
             ('Kano knife input (P2)', PY + [T('kanoknifecheck.py'), '--as-p2']),
+            ("Kano's cannonball: toward, down, away, up", PY + [T('kanoballcheck.py')]),
             ('Sonya square wave (P1)', PY + [T('squarewavecheck.py')]),
             ('Sonya square wave (P2)', PY + [T('squarewavecheck.py'), '--as-p2']),
             ('Sonya leg grab (P1)', PY + [T('leggrabcheck.py')]),
@@ -178,7 +187,7 @@ def main():
         jobs.append((f'{who} daze (P2)', PY + [T('dazecheck.py'), who, '--as-p2']))
         effects = ['--check-raiden-effects', '--stage', '1B'] if who == 'raiden' else []
         jobs.append((f'{who} fatality (P1)', PY + [T('mkfatalitycheck.py'), who] + effects))
-        jobs.append((f'{who} fatality (P2)', PY + [T('mkfatalitycheck.py'), who, '--as-p2'] + effects))
+        jobs.append((f'{who} fatality (P2)', PY + [T('mkfatalitycheck.py'), who, '--as-p2', '--other-punch'] + effects))
         jobs.append((f'{who} fatality on Blast', PY + [T('mkfatalitycheck.py'), who, '--p2', '14']))
         jobs.append((f'{who} fatality on Thanatos', PY + [T('mkfatalitycheck.py'), who, '--p2', '15', '--unlock', '16']))
         jobs.append((f'{who} mirror match', PY + [T('fightcheck.py'), 'duel', str(grid)]))

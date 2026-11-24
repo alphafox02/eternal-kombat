@@ -1238,6 +1238,10 @@ def scorpion_inputs(ec, sources):
     assert off + len(tail) <= MAX_PL, f'{host("PL")} + its tail over {MAX_PL} by {off + len(tail) - MAX_PL}'
     ec.replace_file(host('PL'), pl[:end + 4] + bytes(off - end - 4) + tail)
     print(f'        {len(tail)} bytes of his MK scripts after {host("PL")}\'s chunk chain (+${off:X})')
+    for piece in (mkinputs.GEN_LOW, mkinputs.GEN_KD, mkinputs.GEN_ROOM):
+        if piece.get('data'):
+            print(f'        {len(piece["data"])} bytes in his module\'s room at ${piece["off"]:X}')
+    print(f'        MK code block: {len(bla) - mkinputs.EXT_OFF} bytes at ${mkinputs.EXT_OFF:X}')
     ec.replace_file('PLYR.CO', plyr)
     ec.replace_file(host('CO'), bla)
 
@@ -1396,7 +1400,7 @@ def mk_code(ec, sources):
         print(f'        {len(tail)} bytes of scripts/fatality data after {host("PL")}\'s chunk chain (+${off:X})')
     lim = mkinputs.MORPH_MV                  # (the slot's last 32 bytes: Shang's morph vars and trampoline)
     assert mkinputs.EXT_OFF + len(blk) <= lim, f'{SPEC.key}: block of {len(blk)} bytes overflows the module slot by {mkinputs.EXT_OFF + len(blk) - lim}'
-    for piece in (mkinputs.GEN_LOW, mkinputs.GEN_KD, mkinputs.GEN_ROOM, mkinputs.GEN_ZF):   # (code and tables in the rooms of Blade's pre-fight taunt and his
+    for piece in (mkinputs.GEN_LOW, mkinputs.GEN_KD, mkinputs.GEN_ROOM):   # (code and tables in the rooms of Blade's pre-fight taunt and his
         if piece.get('data'):                           #  victory dances: mk_intro_stance, mk_victory_stance)
             o, d = piece['off'], piece['data']
             co = co[:o] + d + co[o + len(d):]
@@ -2943,6 +2947,8 @@ BLOCK_READS = (0x404, 0x176E, 0x18B4)   # BLA.CO: move.w $1626(a6),d0 - EC's att
 CROUCH_SITE = 0x18F8                    # BLA.CO: his crouch going down: bclr #7,$BE(a5) / bne.b $1906 (crouched)
 CROUCH_ATTACK = 0x19AA                  #  ... and his crouched loop's attack start (d1 = the request)
 CROUCH_OFF = __import__('mkinputs').JUMP_LOW_END   # in the module's low room, after mkinputs' jump drive
+CROUCH_HUMAN = 0x19B0                   #  ... where a human's request becomes its move (addi.w #$D,d1; the CPU's skip it)
+CROUCH_IDLE = 0x199E                    #  ... and the loop's 'no request' (bset #7,$BE(a5); end of frame)
 CROUCH_READ = 0x1998                    # BLA.CO: his crouched loop's move.w $1626(a6),d1 (then bne)
 
 
@@ -2965,6 +2971,124 @@ def block_button_code(org):
     out = a.build()
     assert len(out) <= mkinputs.ZF_SIZE
     return out
+
+
+STAND_ATTACK = 0x1794                   # BLA.CO: his standing attack's start (move.w d0,$BE(a5): d0 the move as
+                                        #  it is - the 'close' moves, $1F + request, are added before it)
+
+
+HUMAN_SITE = 0x1784                     # BLA.CO: jsr $6ADE (d4 = how far the opponent is, for the 'close' moves): a
+                                        #  human's request from his stand or walk loop, d0, just before it starts -
+                                        #  the CPU's skip it ($177E: tst.w $12A(a5) / bne $1794)
+CLOSE = 0x6ADE                          # sys: that distance
+CLOSE_THROW = 0x6AE4                    # sys: the same, $7F if the opponent can't be thrown now (d0 kept)
+THROW_START = 0x17138                   # PLYR: a throw's start, past its read of the held direction ($17112, sys $6AFE:
+                                        #  away held throws behind - $A4(a5) 1)
+SPECIAL_GO = 0x2206                     # BLA.CO: his special moves' start (d0 = the move)
+THROW_GO = 0x19F2                       # BLA.CO: his throw, from its 'gosub' of that start (a0) on
+CTRL_OFF, CTRL_END = __import__('mkinputs').CTRL_ROOM
+
+
+def controls_code(org):
+    """MK CD's inputs for a human's MK fighter, in mkinputs.CTRL_ROOM of his module. Every routine here is
+    called from code only a human's fighter runs, so the CPU's fighter runs what it ran before, instruction
+    for instruction (a fight's course turns on the sub CPU's timing: docs/notes/2026-11.md).
+    h (in place of HUMAN_SITE's jsr; d0 = his request, any of d1-d4/a0/a3 free; ends in that jsr's routine):
+      - up close the high kick (B, 5) is MK CD's throw, whatever direction is held: EC's own test for its
+        throw (his walk loop's, $17E0-$17FE: within 8, neither fighter busy) without the direction, then
+        EC's throw with 'behind' chosen ($A4 1: MK's throws all go over);
+      - MK's back + high kick is the roundhouse and back + low kick the sweep. Holding away, B (5) becomes
+        C (6); A (4) starts the sweep (move $13) as a standing attack, at STAND_ATTACK (the loop's return
+        address dropped). Started that way its first frames still give way to a special (Sub-Zero's slide:
+        back + A + B, a frame or two apart), which EC's crouched attacks don't.
+    jat (Johnny's: in place of CROUCH_HUMAN's addi.w #$D,d1 - a human's crouched request, d1, becoming its
+    move): MK CD's split punch is down + high kick, so B (5) becomes EC's Z (3: move $10, his split punch),
+    and Z itself is no attack (MK's Block, as the others': to the crouched loop's 'no request', $199E).
+    org: module offset."""
+    import mkinputs
+    a = mkinputs.Asm(org)
+    a.labels.update(attack=STAND_ATTACK - org, throw=THROW_GO - org, idle=CROUCH_IDLE - org)
+    a.label('h')
+    a.w(0x0C40, 0x0005)                  # cmpi.w #5,d0        B: the throw, the roundhouse
+    a.bcc(0x66, 'h_a')
+    a.jsr(CLOSE_THROW)                   # d4 = the distance
+    a.w(0x0C44, 0x0008)                  # cmpi.w #8,d4
+    a.bcc(0x6E, 'h_b')                   # bgt
+    a.w(0x7206)                          # moveq #6,d1
+    a.w(0xC22D, 0x011B)                  # and.b $11B(a5),d1   (EC's two flags)
+    a.bcc(0x66, 'h_b')
+    a.w(0x588F)                          # addq.l #4,sp        (the loop's return address)
+    a.w(0x3B7C, 0x0001, 0x00A4)          # move.w #1,$A4(a5)   behind him
+    a.w(0x207C); a.l(THROW_START)        # movea.l #start,a0
+    a.bccw(0x60, 'throw')                # bra.w $19F2
+    a.label('h_b')
+    a.bcc(0x61, 'away')
+    a.bcc(0x67, 'h_x')
+    a.w(0x7006)                          # moveq #6,d0
+    a.bcc(0x60, 'h_x')
+    a.label('h_a')
+    a.w(0x0C40, 0x0004)                  # cmpi.w #4,d0        A: the sweep
+    a.bcc(0x66, 'h_x')
+    a.bcc(0x61, 'away')
+    a.bcc(0x67, 'h_x')
+    a.w(0x7013)                          # moveq #$13,d0
+    a.w(0x588F)                          # addq.l #4,sp
+    a.bccw(0x60, 'attack')               # bra.w $1794
+    a.label('h_x')
+    a.jmp(CLOSE)                         # jmp $6ADE           (the replaced call)
+    a.label('away')                      # Z clear: he holds away (d1 used)
+    a.w(0x7202)                          # moveq #2,d1         left = away ...
+    a.w(0x082D, 0x0003, 0x0020)          # btst #3,$20(a5)     facing left?
+    a.bcc(0x67, 'aw_t')
+    a.w(0x7203)                          # moveq #3,d1         ... or right
+    a.label('aw_t')
+    a.w(0x032E, 0x1629)                  # btst d1,$1629(a6)
+    a.w(0x4E75)                          # rts
+    a.label('jat')
+    a.w(0x0C41, 0x0003)                  # cmpi.w #3,d1        Z: nothing
+    a.bcc(0x67, 'j_no')
+    a.w(0x0C41, 0x0005)                  # cmpi.w #5,d1        B: the split punch
+    a.bcc(0x66, 'j_a')
+    a.w(0x7203)                          # moveq #3,d1
+    a.label('j_a')
+    a.w(0x0641, 0x000D)                  # addi.w #$D,d1       (the replaced instruction)
+    a.w(0x4E75)                          # rts
+    a.label('j_no')
+    a.w(0x588F)                          # addq.l #4,sp
+    a.bccw(0x60, 'idle')                 # bra.w $199E
+    return a.build(), a.labels
+
+
+def rings_code(org):
+    """At mkinputs.RINGS_AT of Sonya's module, called from her zblock's human-only part (a1 = her, a0 free): her
+    energy rings out of the high punch that begins their input (MK CD: high punch, back, a punch - the jab
+    shows, then the rings). EC queues the recognised rings while her punch (move 2; up close $21) plays and
+    drops them before it ends: her move task is sent to Blade's special dispatcher with them at once (as
+    Kano's queued knife, mkinputs r_generic's g_kstart)."""
+    import mkinputs
+    a = mkinputs.Asm(org)
+    a.labels.update(special=SPECIAL_GO - org)
+    a.w(0x0C69, 0x0002, 0x00BE)          # cmpi.w #2,$BE(a1)   her high punch ...
+    a.bcc(0x67, 'rg_q')
+    a.w(0x0C69, 0x0021, 0x00BE)          # cmpi.w #$21,$BE(a1) ... or the close one
+    a.bcc(0x66, 'rg_x')
+    a.label('rg_q')
+    a.w(0x0829, 0x0003, 0x011A)          # btst #3,$11A(a1)    the recogniser has queued a special:
+    a.bcc(0x67, 'rg_x')
+    a.w(0x2069, 0x0184)                  # movea.l $184(a1),a0 her input task's queue
+    a.w(0x0C68, 0x0034, 0x0042)          # cmpi.w #$34,$42(a0) the rings
+    a.bcc(0x66, 'rg_x')
+    a.w(0x2069, 0x0088)                  # movea.l $88(a1),a0  her move task
+    a.w(0x2050)                          # movea.l (a0),a0
+    a.pcrel(0x487A, 'rg_s')              # pea rg_s(pc)
+    a.w(0x215F, 0x0004)                  # move.l (sp)+,4(a0)  resumes there
+    a.w(0x4268, 0x0008)                  # clr.w 8(a0)         at once
+    a.label('rg_x')
+    a.w(0x4E75)                          # rts
+    a.label('rg_s')                      # (her move task: a5 = her)
+    a.w(0x7034)                          # moveq #$34,d0
+    a.bccw(0x60, 'special')              # bra.w $2206
+    return a.build()
 
 
 def crouch_code(org):
@@ -3001,8 +3125,8 @@ def crouch_code(org):
     a.w(0x205F)                          # movea.l (sp)+,a0
     a.w(0x4A41)                          # tst.w d1
     a.bcc(0x66, 'c_go')
-    a.bccw(0x61, 'zf')                   # bsr zf              a press while he goes down (Z: none -
-    a.w(0x3200)                          # move.w d0,d1         Johnny's split punch once he is down)
+    a.bccw(0x61, 'zf')                   # bsr zf              a press while he goes down (Z: none)
+    a.w(0x3200)                          # move.w d0,d1
     a.bcc(0x67, 'c_no')
     a.w(0x082E, 0x0001, 0x1629)          # btst #1,$1629(a6)   down still held
     a.bcc(0x67, 'c_no')
@@ -3073,11 +3197,30 @@ def mk_block_button(ec, sources):
         assert all(co[i] == blade[i] or sheet(i)                    #  taunt's move.b #sheet,$1A: renumbered)
                    for i in range(CROUCH_OFF, CROUCH_OFF + len(cr))), f'{name}: low room taken'
         ec.patch_file(name, CROUCH_OFF, cr)
+        if sp.host_id == mkinputs.SONYA_ID:
+            rg = rings_code(mkinputs.RINGS_AT)
+            assert mkinputs.RINGS_AT + len(rg) <= mkinputs.JUMP_LOW_OFF
+            assert all(co[i] == blade[i] or sheet(i)
+                       for i in range(mkinputs.RINGS_AT, mkinputs.RINGS_AT + len(rg))), f'{name}: low room taken'
+            ec.patch_file(name, mkinputs.RINGS_AT, rg)
+        if sp is not SHANG:              # (his scripts are Blade's own: CTRL_ROOM is live in his module - the CPU's)
+            ctl, clab = controls_code(CTRL_OFF)
+            assert CTRL_OFF + len(ctl) <= CTRL_END, f'controls_code over its room by {CTRL_OFF + len(ctl) - CTRL_END}'
+            assert co[CTRL_OFF - 4:CTRL_OFF] == blade[CTRL_OFF - 4:CTRL_OFF], f'{name}: CTRL_ROOM is not that script'
+            ec.patch_file(name, CTRL_OFF, ctl)
+            to = CTRL_OFF + clab['h']
+            ec.patch_file(name, HUMAN_SITE, bytes.fromhex('6100') + (to - (HUMAN_SITE + 2)).to_bytes(2, 'big', signed=True)
+                          + bytes.fromhex('4e71'), expect=bytes.fromhex('4eb900006ade'))
+            if sp.host_id == mkinputs.JOHNNY_ID:
+                to = CTRL_OFF + clab['jat']
+                ec.patch_file(name, CROUCH_HUMAN, bytes.fromhex('6100') + (to - (CROUCH_HUMAN + 2)).to_bytes(2, 'big', signed=True),
+                              expect=bytes.fromhex('0641000d'))
         for at in BLOCK_READS:
-            to = org if at == 0x404 else CROUCH_OFF + lab['zfw']      # (stand, walk: zfw; the air: zf)
+            to = org if at == 0x404 else CROUCH_OFF + lab['zfw']   # (the air: zf; stand, walk: zfw)
             ec.patch_file(name, at, bytes.fromhex('6100') + (to - (at + 2)).to_bytes(2, 'big', signed=True),
                           expect=bytes.fromhex('302e1626'))
-        if sp.host_id != mkinputs.JOHNNY_ID:     # (Johnny's down + Z is his split punch, move $10)
+        if sp.host_id != mkinputs.JOHNNY_ID:     # (Johnny's crouched loop reads EC's way: move $10, EC's down + Z, is his
+                                                 #  split punch - the CPU's still; a human's Z is dropped by jat)
             to = CROUCH_OFF + lab['cz']
             ec.patch_file(name, CROUCH_READ, bytes.fromhex('6100') + (to - (CROUCH_READ + 2)).to_bytes(2, 'big', signed=True),
                           expect=bytes.fromhex('322e1626'))

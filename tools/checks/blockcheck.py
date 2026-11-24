@@ -7,7 +7,7 @@ fighter, human) stands next to Shadow (player 2) and holds Z while she punches (
 down + Z while she kicks low (down + A). Each must cost him no health (a block: EC's state 7 standing,
 $0C crouching). Control: down alone against the low kick is hit.
 
-    blockcheck.py [--fighters sonya,kano,scorpion]
+    blockcheck.py [--fighters sonya,kano,scorpion,johnny]
 """
 import argparse, os, subprocess, sys, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))   # (the library: tools/lib/)
@@ -23,7 +23,7 @@ CASES = (('Z vs a punch', {'z'}, {'y'}, False, True), ('Z vs a kick', {'z'}, {'b
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--fighters', default='sonya,kano,scorpion')
+    ap.add_argument('--fighters', default='sonya,kano,scorpion,johnny')
     a = ap.parse_args()
     cue = os.path.join(ROOT, 'build', 'Eternal Kombat', 'Eternal Kombat.cue')
     bad = 0

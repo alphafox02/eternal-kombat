@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: MIT
 """The bodies of Blade's move scripts that an MK fighter's block replaces are never played.
 
-The build keeps code there (mkinputs.GEN_DEAD: room_put's fourth room). PLYR $1A278 builds the move
+The build keeps code there (mkinputs.GEN_DEAD: room_put's third room). PLYR $1A278 builds the move
 table from the chain of Blade's scripts at fight start, reading only each one's slot and step count; the
 block puts its own scripts in those slots every frame. If a fighter ever ran one of those Blade scripts,
 he'd play the code there as animation steps.
 
-2-player duels of MK fighters against each other (each MK fighter but Scorpion - whose module keeps
-Blade's own - on both sides), FRAMES frames of random pad input each: a fighter's running script ($AE)
-is never inside one of those bodies.
+2-player duels of MK fighters against each other (each MK fighter on both sides; Scorpion too - his
+module has code in one of them, mkinputs.CTRL_ROOM, as they all have), FRAMES frames of random pad input
+each: a fighter's running script ($AE) is never inside one of those bodies.
 
     deadscriptcheck.py [--frames N] [--disc CUE]     (after play.py test has made build/states/menu.state)
 """
@@ -20,9 +20,9 @@ from inputs import ROOT
 
 P = ((0x2E188, 0x1B000), (0x2E330, 0x21800))        # (fighter object, his module's load address)
 L = lambda r, o: int.from_bytes(r[o:o + 4], 'big')
-GRID = {'mk_moves_raiden': 7, 'mk_moves_subzero': 15, 'mk_moves_sonya': 16, 'mk_moves_liukang': 17,
+GRID = {'mk_moves': 20, 'mk_moves_raiden': 7, 'mk_moves_subzero': 15, 'mk_moves_sonya': 16, 'mk_moves_liukang': 17,
         'mk_moves_kano': 18, 'mk_moves_johnny': 19}
-PAIRS = [(16, 18), (18, 16), (15, 19), (19, 15), (17, 7), (7, 17)]
+PAIRS = [(16, 18), (18, 16), (15, 19), (19, 15), (17, 7), (7, 17), (20, 15), (16, 20)]
 BUTTONS = ['up', 'down', 'left', 'right', 'a', 'b', 'c', 'x', 'y', 'z']
 
 
