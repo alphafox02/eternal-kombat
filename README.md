@@ -87,7 +87,7 @@ For MK fighters:
 - **Down + X or Y** is the uppercut; **down + A or B** the low kick (Johnny Cage's down + B is his
   split punch).
 - **Up close, B** throws, as MK CD's high kick; toward + Y throws too. X or Y is MK's close punch
-  (Kano's headbutt) and A the knee (Raiden keeps his usual punch and low kick there).
+  (Kano's headbutt) and A the knee (Raiden keeps his usual low kick there).
 - **Special moves and fatalities** take MK CD's own motions with these buttons (Z where MK says
   Block). Where MK names a punch either punch does it, as on MK CD.
 

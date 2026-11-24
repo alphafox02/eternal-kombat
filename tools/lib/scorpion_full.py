@@ -554,6 +554,7 @@ CLOSE_REACH = {(0x42, 0x1C): (0x42, 0x13), (0x40, 0x1D): (0x40, 0x37), (0x40, 0x
 # art groups on Blade's projectile move ($34): Scorpion's spear, the others'
 # bolts (their strike box is the spear's: stretched on 42:2E, off elsewhere)
 PROJECTILES = ('spear', 'lightning', 'iceblast', 'greenbolt', 'fireball', 'knife', 'rings', 'skull')
+OWN_CUT = PROJECTILES + ('spear_bare',)      # (cut or boxed by action: not merged with others' images)
 SPEAR_REACH = 127             # px; boxes are signed bytes, so this is the most data allows
 
 
@@ -796,6 +797,21 @@ def build(pl, root):
         merges = {s_: d for s_, d in merges.items()      # (a pose no longer picked - the jumps' stance,
                   if s_ in chosen.values() and d in chosen.values()}   #  stance_lead - needs no merge)
         chosen = {k: merges.get(v, v) for k, v in chosen.items()}
+    # the same image again from a capture taken at another place on the screen (the same anchor within
+    # the image, the same palette): stored once too. Not across the actions cut or boxed their own way
+    # (the spear, the projectiles, the jumps fitted below, the uppercut the sweep's box reads). It was
+    # stored once per place: 12-20 KB of each MK fighter's art twice (notes 2026-11-24)
+    def same_key(v):
+        p, a, cram = actions[v[0]][0][v[1]], actions[v[0]][1][v[1]], actions[v[0]][2]
+        ys, xs = np.nonzero(p)
+        own = v[0] if v[0] in OWN_CUT or v[0] in FIT_ALL or v[0] in SWEEP_STRIKES.values() else ''
+        return (crop_key(p), int(xs.max() - xs.min()), int(ys.max() - ys.min()), a[0] - int(xs.min()),
+                a[1] - int(ys.min()), tuple(cram), own)   # (the crop's bytes, its size, the anchor in it)
+    once = {}
+    for v in sorted({v for v in chosen.values() if v}):
+        if actions[v[0]][0][v[1]].any():
+            once.setdefault(same_key(v), v)
+    chosen = {k: once.get(same_key(v), v) if v and actions[v[0]][0][v[1]].any() else v for k, v in chosen.items()}
     distinct = sorted({v for v in chosen.values() if v})
     cut = {}
     for action, i in distinct:

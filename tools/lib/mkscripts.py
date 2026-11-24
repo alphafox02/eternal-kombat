@@ -64,11 +64,13 @@ FREE = [(0x40, f) for f in (0x04, 0x05, 0x1F, 0x20, 0x21, 0x26, 0x28, 0x2A, 0x2B
 
 
 CLOSE_ACTIONS = ('headbutt', 'close_punch', 'close_knee')
-# the fighters with MK's close moves. Not Raiden: his .PL and the scripts after it (player 2's at
-# most 188416 bytes, scorpion_full.MAX_PL) had 1.4 KB left, his close punch takes 3.5 KB; up close
-# he keeps the far ones. (Kano's close punch is his headbutt, his knee 3.5 KB of his 4.7.)
+# the fighters with MK's close moves. Raiden's .PL and the scripts after it (player 2's at most
+# 188416 bytes, scorpion_full.MAX_PL) had 1.4 KB left, his close punch takes 3.5 KB: it fit once his
+# art stored each image once (scorpion_full: 5.5 KB back), his knee doesn't (626 bytes over) - up
+# close his A is the far low kick (CLOSE_PUNCH_ONLY). (Kano's close punch is his headbutt.)
 CLOSE_DIRS = ('mk_moves', 'mk_moves_johnny', 'mk_moves_subzero', 'mk_moves_liukang', 'mk_moves_kano',
-              'mk_moves_sonya')
+              'mk_moves_sonya', 'mk_moves_raiden')
+CLOSE_PUNCH_ONLY = ('mk_moves_raiden',)
 CLOSE_FAR = {0x20: 'btn_a', 0x21: 'btn_x', 0x23: 'btn_c'}
 EC_LAG_TICKS = 6              # (the headbutt's hold, below: measured on hits, so not a move overhead -
                               #  traced: a jab plays exactly its script, 2 frames a tick, 1 frame after the
@@ -189,8 +191,9 @@ def build(co, mk_dir='mk_moves'):
         trim, how = (opt + ['', 'reach'])[:2] if opt else ('', 'reach')
         if mk_dir == 'mk_moves_kano' and action == 'close_punch':
             action = 'headbutt'                   # (his close punch: the capture made first, the same move)
-        if action in ('close_punch', 'close_knee') and mk_dir not in CLOSE_DIRS:
-            action, trim, how = CLOSE_FAR[mid], '', 'reach'   # (Raiden, Shang Tsung: the far ones)
+        if action in ('close_punch', 'close_knee') and mk_dir not in CLOSE_DIRS \
+                or action == 'close_knee' and mk_dir in CLOSE_PUNCH_ONLY:
+            action, trim, how = CLOSE_FAR[mid], '', 'reach'   # (Shang Tsung; Raiden's knee: the far ones)
         hdr, steps, term = blade_script(co, head)
         hits = [s for s in steps if s[10:12] != b'\0\0']
         # Blade's last strike (his Y has two; the second reaches), unless one

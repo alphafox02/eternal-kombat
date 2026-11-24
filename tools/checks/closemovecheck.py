@@ -3,8 +3,8 @@
 """MK fighters' close moves: MK CD's own up close (mkscripts CLOSE_ACTIONS).
 
 Up close, MK CD's punches are one close punch (Kano's: his headbutt) and its low kick a knee (Sonya's
-shows her far low kick's poses); here X and Y (EC's close moves $20 / $21) and A ($23). Raiden keeps
-the far ones (no room in his .PL: mkscripts.CLOSE_DIRS). For each MK fighter, in 2-player duels with
+shows her far low kick's poses); here X and Y (EC's close moves $20 / $21) and A ($23). Raiden's A is
+his far low kick (no room in his .PL: mkscripts.CLOSE_PUNCH_ONLY). For each MK fighter, in 2-player duels with
 Shadow, on both sides, next to her: each button plays its close move, the frames shown are its
 script's (mkscripts.build: the close capture's poses, Blade's strike frame), and Shadow loses health.
 Then at FINISH HIM (Shadow dazed on 1 health where his jab left her, ~50-66 px: EC's close range runs to

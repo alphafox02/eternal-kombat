@@ -66,8 +66,9 @@ CD: MK1's Kano headbutts with his close punches): he lurches in, head bent into 
 opponent - the likeliest "throw". (EC also throws on toward + Y up close; MK CD's own throw,
 the high kick up close, is B here: notes 2026-11-23.)
 **Done (2026-11-24)**: every MK fighter's close punch (X, Y) and knee (A) are MK CD's own close
-moves, captured (mkmoves close_punch / close_knee); Raiden keeps the far ones (no room in his
-.PL). tools/checks/closemovecheck.py; notes 2026-11-24.
+moves, captured (mkmoves close_punch / close_knee); Raiden's knee stays his far low kick (no
+room in his .PL; his close punch fit once his art stored each image once). tools/checks/closemovecheck.py;
+notes 2026-11-24.
 
 ### 0d. The Pit's music (fixed)
 **Found**: the Pit is the Senator's stage mode ($1F), whose track is EC 13 (the Senator's

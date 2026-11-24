@@ -111,7 +111,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `allchecks.py` | Every check, for every MK fighter, on the current build (run after tools/build.py; it starts with the test suite, which boots the new disc and re-saves build/states/menu.state). |
 | `backkickcheck.py` | MK fighters' back + B is the roundhouse and back + A the sweep (as MK CD's away + kick), both sides; C, down + C, A, B as before; Sub-Zero's slide; a CPU fight unchanged. |
 | `blockcheck.py` | Does Z block for an MK fighter? |
-| `closemovecheck.py` | Up close, MK fighters' X and Y are MK CD's close punch (Kano's headbutt) and A its knee, both sides: the close moves' frames shown and the victim hurt (Raiden keeps the far ones: no room in his .PL). |
+| `closemovecheck.py` | Up close, MK fighters' X and Y are MK CD's close punch (Kano's headbutt) and A its knee, both sides: the close moves' frames shown and the victim hurt (Raiden's A stays his low kick: no room in his .PL). |
 | `contestcheck.py` | One-player Contest (the ladder) with a fighter: does it run from match to match without freezing? |
 | `dazecheck.py` | An MK fighter's FINISH HIM daze: MK's 7-pose sway (mkinputs.DAZE_FRAMES at MK's timing, DAZE_SEQ: ~10 frames a pose, looped). |
 | `deadscriptcheck.py` | MK fighters in random fights: a fighter's running script is never one of Blade's that his block replaces (the build keeps code in their bodies). |
@@ -182,6 +182,7 @@ For developers: disassembly, sprite and frame inspection, videos, audits, and `v
 | tool | what it does |
 |---|---|
 | `animaudit.py` | Where do our MK fighters lose MK's animation? |
+| `artproof.py` | Does a change to how the art is stored leave every frame the same? Every MK fighter's frames decoded by EC's own unpacker, against the builder at a git revision. |
 | `blastfinisher.py` | Blast's stage finishers recorded with sound: the Overkill (the gunship) or the Sudden Death (the watchtower gunner). |
 | `buildreads.py` | Which captured poses does the build read? |
 | `clean.py` | What's in the ignored output folders (build/, build/shots/, build/runs/, build/states/, build/saves/), and deleting only what you name. |
