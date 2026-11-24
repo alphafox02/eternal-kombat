@@ -399,6 +399,12 @@ Each with what MK does, and the check that holds it. Where there is no check yet
   recogniser starts the move 2 frames after the press). Raiden's torpedo, measured the same way, already
   matches MK's (moving 7 frames after forward, its flying pose on MK's frame, 7 px a frame to MK's
   7.5). Check: flykickcheck.py.
+- **Liu Kang's flying kick at MK's speed, floating back when it connects** (2026-11-24; "slow
+  motion"): its flight was 2.5 px a frame (flykick_plan spread a fixed 196 px over MK's 38-frame
+  hold); MK's is 7.5 (measured, $7BE34), held as long. On contact MK doesn't fly on: he stays in the
+  kick and floats back ~56 px in 25 frames, holds, and lands 38 frames after the contact. Now the dash
+  header's speed is 15 px a tick, and at the contact (emit_flykick_stop) his velocity turns to 6 px a
+  tick backwards and the kick is held 16 ticks more, then the landing. Check: flykickcheck.py (both sides).
 
 Still open from these reports:
 - Blast's Vendetta, switched off on MK losers (VENDETTA_WINNERS): allowed in RAM (vendettacheck.py 14

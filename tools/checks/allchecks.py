@@ -155,7 +155,7 @@ def main():
             ("Riptide's bubble on Kano (an even tint)", PY + [T('tintcheck.py')]),
             ("MK sweeps drop an EC fighter in place", PY + [T('sweepcheck.py')]),
             ("Blade's replaced scripts never run (code kept in them)", PY + [T('deadscriptcheck.py')]),
-            ("Liu Kang's flying kick gets going as MK's", PY + [T('flykickcheck.py')]),
+            ("Liu Kang's flying kick as MK's", PY + [T('flykickcheck.py')]),
             ("Reptile's fight starts on the Pit's bottom", PY + [T('pitstartcheck.py')]),
             ('The title screen says ETERNAL KOMBAT', PY + [T('titlecheck.py')]),
             ("The title plays EC's song then MK's Mortal Monday music, never the cues", PY + [T('menumusiccheck.py')]),

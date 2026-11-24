@@ -120,7 +120,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `fightcheck.py` | Does a fight run without freezing? |
 | `finishercheck.py` | Unit-test the built disc's finisher checks for MK losers (Cinekill, stage Sudden Death) on a 68000 under unicorn. |
 | `finishmusiccheck.py` | An unfinished FINISH HIM must not run into the fatality music. |
-| `flykickcheck.py` | Liu Kang's flying kick (forward, forward + HK): travelling within 6 frames of HK and kicking within 10, as MK's (it stood 12 frames first). |
+| `flykickcheck.py` | Liu Kang's flying kick (forward, forward + HK), both sides: travelling within 6 frames of HK and kicking within 10, flying at MK's 7.5 px a frame, and on contact floating back in the kick and landing, as MK's. |
 | `gruntcheck.py` | MK's grunts: an MK fighter grunts once as he leaves the floor on a jump; punches, kicks and EC fighters don't. |
 | `icecheck.py` | Sub-Zero's ice blast freezes, and a blocked one doesn't (as on MK CD). |
 | `jumpcheck.py` | MK's jumps (patches.mk_jump_height, mkinputs.jump_up_launch): straight up as long in the air as MK's, forward / back at EC's gravity and MK's height, a jump kick lands with the jump. |

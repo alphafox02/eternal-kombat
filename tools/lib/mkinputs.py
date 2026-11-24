@@ -2629,15 +2629,18 @@ def ice_plan(mk_dir):
     return bytes(hdr) + steps + term, pins, release
 
 
-FLYKICK_DIST = 7 * 2 * 14              # px: Liu Kang's flight as tuned (patches.DASH_TUNE: 7 px a frame on
-                                       #  the dash's 14 travelling ticks - 41:61 2, 41:62 12)
+DASH_MOVE = 0x35                       # Blade's dash: the move his flying kick plays
+FLYKICK_SPEED = 15                     # px a tick (the dash header's speed is per tick of 2 frames): MK CD's
+                                       #  flying kick flies 7.5 px a frame (measured: $7BE34, 146 px in 19 frames,
+                                       #  level, ~10 px up) until it connects. Was 5 (2.5 px a frame: slow motion)
 
 
 def flykick_plan(mk_dir):
     """Liu Kang's flying kick on Blade's dash ($35, 7 steps): MK's timeline (the capture's order.txt,
     his first pose off the stance to the stance again: 7 poses) - the wind-up (moving, as MK), the kick (the
     held pose: on 41:62, Blade's strike, its hit box and hit data) flying for as long as MK holds it,
-    the landing. -> ([(frame, ticks, flags, flies)], pins, px a frame for the flight)."""
+    the landing. -> ([(frame, ticks, flags, flies)], pins, px a tick for the flight). The flight ends
+    when the kick connects (emit_flykick_stop)."""
     import numpy as np, scorpion_full as sf
     from inputs import ROOT
     d = os.path.join(ROOT, 'extracted', mk_dir, 'flyingkick')
@@ -2684,9 +2687,48 @@ def flykick_plan(mk_dir):
             steps.append((slot[k], 1, 0x0402 if steps else 0x0002, False))
         else:
             steps.append((slot[k], ticks, 0, False))
-    fly = next(t for f, t, _, fl in steps if fl)
     pins = [f'{f >> 8:02x}:{f & 0xFF:02x}={k}' for k, f in slot.items()]
-    return steps, pins, max(1, round(FLYKICK_DIST / (2 * fly)))
+    return steps, pins, FLYKICK_SPEED
+
+
+FLYKICK_BACK = 6                       # px a tick: after it connects MK's kick floats back (measured on MK CD:
+                                       #  ~56 px in 25 frames, then still) ...
+FLYKICK_AFTER = 16                     # ticks: ... held in the air 38 frames from the contact, then the landing
+
+
+def emit_flykick_stop(a):
+    """(a1 = Liu Kang) MK's flying kick flies until it connects, then floats back: in his flight step
+    (the dash $35 showing 41:62), once its hit is spent ($F7 bit 1 cleared: hit or blocked) his
+    velocity turns to FLYKICK_BACK px a tick backwards ($C6, the travel the step's $0400 flag applies,
+    and $5E, this tick's: EC slows it to a stop) and the step is held FLYKICK_AFTER ticks more (his
+    task's tick counter, as the knockdown drive's), then the landing step. Once: then he's going
+    backwards. Without it he flew on at 7.5 px a frame, carrying the victim. Uses d0/a0."""
+    a.w(0x3029, 0x00BE)                  # move.w $BE(a1),d0
+    a.w(0x0240, 0x7FFF)                  # andi.w #$7FFF,d0
+    a.w(0x0C40, DASH_MOVE)               # cmpi.w #$35,d0
+    a.bcc(0x66, 'g_fkn')
+    a.w(0x0C69, fr(0x4162), 0x001A)      # cmpi.w #41:62,$1A(a1)   the flight
+    a.bcc(0x66, 'g_fkn')
+    a.w(0x0829, 0x0001, 0x00F7)          # btst #1,$F7(a1)     its hit not yet spent
+    a.bcc(0x66, 'g_fkn')
+    a.w(0x2029, 0x00C6)                  # move.l $C6(a1),d0   his velocity, on the screen (EC sets its own
+    a.w(0x0829, 0x0003, 0x0020)          # btst #3,$20(a1)      at some hits: a jumping victim's +7)
+    a.bcc(0x66, 'g_fkl')                 # facing left?
+    a.w(0x4A80)                          # tst.l d0             facing right: going left already
+    a.bcc(0x6B, 'g_fkn')
+    a.w(0x203C); a.l((-FLYKICK_BACK << 16) & 0xFFFFFFFF)   # move.l #-back,d0
+    a.bcc(0x60, 'g_fks')
+    a.label('g_fkl')
+    a.w(0x4A80)                          # tst.l d0             facing left: going right already
+    a.bcc(0x6E, 'g_fkn')
+    a.w(0x203C); a.l(FLYKICK_BACK << 16)   # move.l #back,d0
+    a.label('g_fks')
+    a.w(0x2340, 0x00C6)                  # move.l d0,$C6(a1)
+    a.w(0x2340, 0x005E)                  # move.l d0,$5E(a1)
+    a.w(0x2069, 0x0088)                  # movea.l $88(a1),a0
+    a.w(0x2050)                          # movea.l (a0),a0
+    a.w(0x317C, FLYKICK_AFTER, 0x0026)   # move.w #ticks,$26(a0)
+    a.label('g_fkn')
 
 
 JUMP_POSES_CAP = {'mk_moves_raiden': 5}   # (Raiden, CHW.PL: 3.6 KB of room since sheet $45 went - his roll 5 poses,
@@ -6277,6 +6319,8 @@ def r_generic(a, scripts, fwd, back, hit, throw, sounds={}, leg=None, kick=None)
     a.label('g_nthr')
     if SCORPION_ID == RAIDEN_ID:
         emit_rtele(a)
+    if SCORPION_ID == LIUKANG_ID:
+        emit_flykick_stop(a)             # his flying kick floats back when it connects
     emit_throwcall(a)                    # his throw's victim lands like MK's
     if SCORPION_ID == SONYA_ID:
         emit_leggrab_drive(a, leg)
