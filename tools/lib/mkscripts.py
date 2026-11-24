@@ -29,11 +29,12 @@ MOVES = [
     (4, 'btn_c', 0x42C8),
     (5, 'btn_z', 0x4284),
     (6, 'roundhouse', 0x4228),
-    # up close EC plays other moves for the same buttons (MK doesn't): the
-    # same MK animations, with the close moves' own hit steps
-    (0x20, 'btn_a', 0x47C4),
-    (0x21, 'btn_x', 0x485C),
-    (0x23, 'btn_c', 0x492C),
+    # up close, EC's close moves with their own hit steps: MK CD's close
+    # moves on the punches and the low kick (CLOSE_ACTIONS), the far ones on
+    # the high kick (a player's throws: patches.controls_code) and roundhouse
+    (0x20, 'close_punch', 0x47C4, 'approach', 'reach'),
+    (0x21, 'close_punch', 0x485C, 'approach', 'reach'),
+    (0x23, 'close_knee', 0x492C, 'approach', 'reach'),
     (0x24, 'btn_z', 0x4964),
     (0x25, 'roundhouse', 0x499C),
     # crouching (MK CD: both crouching punches are the uppercut, both
@@ -62,6 +63,13 @@ FREE = [(0x40, f) for f in (0x04, 0x05, 0x1F, 0x20, 0x21, 0x26, 0x28, 0x2A, 0x2B
        [(0x43, f) for f in (0x00, 0x01, 0x02, 0x04, 0x05, 0x08)]
 
 
+CLOSE_ACTIONS = ('headbutt', 'close_punch', 'close_knee')
+# the fighters with MK's close moves. Not Raiden: his .PL and the scripts after it (player 2's at
+# most 188416 bytes, scorpion_full.MAX_PL) had 1.4 KB left, his close punch takes 3.5 KB; up close
+# he keeps the far ones. (Kano's close punch is his headbutt, his knee 3.5 KB of his 4.7.)
+CLOSE_DIRS = ('mk_moves', 'mk_moves_johnny', 'mk_moves_subzero', 'mk_moves_liukang', 'mk_moves_kano',
+              'mk_moves_sonya')
+CLOSE_FAR = {0x20: 'btn_a', 0x21: 'btn_x', 0x23: 'btn_c'}
 EC_LAG_TICKS = 6              # (the headbutt's hold, below: measured on hits, so not a move overhead -
                               #  traced: a jab plays exactly its script, 2 frames a tick, 1 frame after the
                               #  press; the punch trim built on 'EC adds ~12 frames' cut MK's strike hold)
@@ -179,8 +187,10 @@ def build(co, mk_dir='mk_moves'):
     claimed = {}                                  # strike frame -> action showing it
     for mid, action, head, *opt in MOVES:
         trim, how = (opt + ['', 'reach'])[:2] if opt else ('', 'reach')
-        if mk_dir == 'mk_moves_kano' and mid in (0x20, 0x21):
-            action, trim = 'headbutt', 'approach'
+        if mk_dir == 'mk_moves_kano' and action == 'close_punch':
+            action = 'headbutt'                   # (his close punch: the capture made first, the same move)
+        if action in ('close_punch', 'close_knee') and mk_dir not in CLOSE_DIRS:
+            action, trim, how = CLOSE_FAR[mid], '', 'reach'   # (Raiden, Shang Tsung: the far ones)
         hdr, steps, term = blade_script(co, head)
         hits = [s for s in steps if s[10:12] != b'\0\0']
         # Blade's last strike (his Y has two; the second reaches), unless one
@@ -192,6 +202,11 @@ def build(co, mk_dir='mk_moves'):
         seq, P = sequence(action, mk_dir, trim)
         if not seq:
             continue
+        if action in ('close_punch', 'close_knee'):
+            # the move ends back on the pose it started from (a capture may run on into
+            # stance poses its idle capture missed: Raiden's did)
+            back = [i for i, (k, _) in enumerate(seq) if i and k == seq[0][0]]
+            seq = seq[:back[-1] + 1] if back else seq
         active = active_pose(P, seq, how)
         slots, entries = {}, []
         mine = shared.setdefault(action, {})
@@ -251,10 +266,10 @@ def build(co, mk_dir='mk_moves'):
             else:
                 body = bytes(8)                       # recovery
             out.append(slots[k].to_bytes(2, 'big') + ticks.to_bytes(2, 'big') + body)
-        if action == 'headbutt':
+        if action in CLOSE_ACTIONS:
             # measured (mk_fidelity_spec: attack timing): MK's headbutt can be followed by a
             # second press after 39 frames, ours after 50; its long strike hold gives the
-            # difference back (EC_LAG_TICKS)
+            # difference back (EC_LAG_TICKS). MK's other close moves hold their strike as long.
             i = max(range(len(out)), key=lambda j: int.from_bytes(out[j][2:4], 'big'))
             t = int.from_bytes(out[i][2:4], 'big')
             out[i] = out[i][:2] + max(HIT_TICKS, t - EC_LAG_TICKS).to_bytes(2, 'big') + out[i][4:]

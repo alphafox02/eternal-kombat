@@ -1573,15 +1573,21 @@ def r_fatal(a):
     a.label('f_nthr')
     a.w(0x0803, BLOCK_BIT)               # btst #8,d3          Block held?
     a.bcc(0x67, 'f_noz')
-    a.w(0x0803, UP_BIT)                  # btst #0,d3          Up now ...
-    a.bcc(0x67, 'f_noup')
-    a.w(0x3032, 0x2030)                  # move.w 48(a2,d2.w),d0
-    a.w(0x0800, UP_BIT)                  # btst #0,d0          ... and not before
-    a.bcc(0x66, 'f_noup')
+    # this runs every other frame (at times every third) and EC shows a quick tap in
+    # the pad word for a frame or two: Up in the frame before counts too (EC's reader
+    # keeps that pad, $A42 / $A44 = 8(a3)) - a 3-frame tap was lost at 1 timing in 7.
+    # (No room for more code: Up goes to bit 15 by a rotate, the saved word's sign)
+    assert UP_BIT == 0
+    a.w(0x302B, 0x0008)                  # move.w 8(a3),d0     the pad a frame ago
+    a.w(0x8043)                          # or.w d3,d0          and now
+    a.w(0xE258)                          # ror.w #1,d0         Up -> bit 15
+    a.bcc(0x6A, 'f_noup')                # bpl                 Up now ...
+    a.w(0x4A72, 0x2030)                  # tst.w 48(a2,d2.w)
+    a.bcc(0x6B, 'f_noup')                # bmi                 ... and not before
     a.w(0x5272, 0x2028)                  # addq.w #1,40(a2,d2.w)   one more tap
     a.w(0x35BC, 0x0014, 0x202C)          # move.w #20,44(a2,d2.w)  window
     a.label('f_noup')
-    a.w(0x3583, 0x2030)                  # move.w d3,48(a2,d2.w)
+    a.w(0x3580, 0x2030)                  # move.w d0,48(a2,d2.w)   (Up in its sign)
     # Z is MK's Block button: EC never sees Z or Up, it sees "back" (= block)
     # MK's Block stands still: no Z, Up, left or right reach EC. EC blocks by
     # holding back, so back is fed only while the opponent attacks ($F6 bit 5
@@ -2419,14 +2425,15 @@ def _throw_calls_pins(mk_dir, frames, times, last):
     return tuple(slot[k] for k in calls), pins
 
 
-# Sonya's leg grab (MK CD: down + LP + LK + Block, close): MK's capture (mkmoves
+# Sonya's leg grab (MK CD: down + LP + LK, close; Block held too is the same): MK's capture (mkmoves
 # 'leggrab') bends (16), hands down (17), kicks up (18) into a handstand (19), holds
 # the arch that clamps and flings the victim (20, the longest), and comes back
 # 19, 21, 18, 17, 16 to her stance. It is EC's throw (move $0D: the victim lifted
 # by THROW_PEAK_AT, released behind at THROW_RELEASE) with these poses: the way up
 # squeezed into the lift, the arch held to the release, the way back in what's left.
 # The input: her block (emit_leggrab_pad) turns those buttons into back + Y.
-LEG_BUTTONS = 0x0542          # pad: X (LP) $400 + A (LK) $40 + Z (Block) $100 + down 2
+LEG_BUTTONS = 0x0442          # pad: X (LP) $400 + A (LK) $40 + down 2 (measured: MK CD needs no Block)
+LEG_CLEARS = LEG_BUTTONS | 0x0100   # and Z (Block) $100, if held too: cleared with them
 LEG_KEEP = 8                  # calls a leg grab flag lives outside the throw (vars+64/65)
 
 
@@ -2476,7 +2483,7 @@ def emit_leggrab_pad(a):
     a.w(0x0241, LEG_BUTTONS)             # andi.w #buttons,d1
     a.w(0x0C41, LEG_BUTTONS)             # cmpi.w #buttons,d1
     a.bcc(0x66, 'lp_no')
-    a.w(0x0240, (~(LEG_BUTTONS | 0xF)) & 0xFFFF)   # andi.w: no directions, no X/A/Z
+    a.w(0x0240, (~(LEG_CLEARS | 0xF)) & 0xFFFF)    # andi.w: no directions, no X/A/Z
     a.w(0x0040, 1 << THROW_BIT)          # ori.w #Y,d0
     a.w(0x0829, 0x0003, 0x0020)          # btst #3,$20(a1)     facing left?
     a.bcc(0x66, 'lp_l')
@@ -5222,19 +5229,29 @@ def emit_gfatal(a):
     a.bccw(0x61, 'gk_step')
     a.bccw(0x60, 'g_out')
     a.label('gk_idle')
+    # the taps: directions held now or a frame ago (EC's reader keeps that pad 8 bytes on) that
+    # weren't at his last call (+44: kept every call). This runs every other frame, at times every
+    # third, and EC shows a quick tap for a frame or two: by EC's new presses ($162) alone a
+    # 3-frame tap was lost at 1 timing in 7
+    a.w(0x41EE, 0x0A3A)                  # lea $A3A(a6),a0     his pad (player 1's ...
+    a.w(0xB3FC); a.l(0x2E188)            # cmpa.l #P1,a1
+    a.bcc(0x67, 'gk_tp1')
+    a.w(0x5488)                          # addq.l #2,a0        ... or 2's)
+    a.label('gk_tp1')
+    a.w(0x3210)                          # move.w (a0),d1
+    a.w(0x8268, 0x0008)                  # or.w 8(a0),d1       and a frame ago
+    a.w(0x302A, 0x002C)                  # move.w 44(a2),d0    at his last call
+    a.w(0x3541, 0x002C)                  # move.w d1,44(a2)
+    a.w(0x4640)                          # not.w d0
+    a.w(0xC240)                          # and.w d0,d1         new since (gkok keeps d1)
     a.w(0x4AAA, 0x0034)                  # tst.l 52(a2)        only in his FINISH HIM window
     a.bccw(0x67, 'gk_x')
     emit_gkok(a)
     a.bccw(0x61, 'gkok')                 # bsr.w gkok          (both free to start it: thrown, hit, out of her daze)
     a.bccw(0x66, 'gk_x')                 # bne: not now
-    a.w(0x3029, 0x0162)                  # move.w $162(a1),d0  new presses
-    a.w(0x3400)                          # move.w d0,d2        (buttons: new or held - this code runs
-    a.w(0x41EE, 0x0A3A)                  # lea $A3A(a6),a0      every other frame, a quick press can be
-    a.w(0xB3FC); a.l(0x2E188)            # cmpa.l #P1,a1        new only in between)
-    a.bcc(0x67, 'gk_bp1')
-    a.w(0x5488)                          # addq.l #2,a0
-    a.label('gk_bp1')
-    a.w(0x8450)                          # or.w (a0),d2
+    a.w(0x3429, 0x0162)                  # move.w $162(a1),d2  buttons: new presses,
+    a.w(0x846A, 0x002C)                  # or.w 44(a2),d2      or held (now or a frame ago)
+    a.w(0x3001)                          # move.w d1,d0
     a.w(0x0240, 0x000F)                  # andi.w #$F,d0       taps, his way round:
     a.w(0x0829, 0x0003, 0x0020)          # btst #3,$20(a1)
     a.bcc(0x67, 'gk_nf')
@@ -6430,7 +6447,7 @@ def emit_pl_tail(a, off=None, label='pl_tail'):
 
 
 GENERIC_VARS = 66             # bytes: a generic block's vars (as Scorpion's: +14..+23 the flight, +24 a fatality,
-                              # +52..+61 FINISH HIM, +63 Sonya lifted, +64/+65 her leg grab)
+                              # +44 its pad, +52..+61 FINISH HIM, +63 Sonya lifted, +64/+65 her leg grab)
 
 
 DAZE_PAD = 0xCD8              # a generic module: daze_pad, the second victory room's end (VROOM; it was

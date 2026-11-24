@@ -86,7 +86,8 @@ For MK fighters:
   kick; C and down + C give them too.
 - **Down + X or Y** is the uppercut; **down + A or B** the low kick (Johnny Cage's down + B is his
   split punch).
-- **Up close, B** throws, as MK CD's high kick; toward + Y throws too.
+- **Up close, B** throws, as MK CD's high kick; toward + Y throws too. X or Y is MK's close punch
+  (Kano's headbutt) and A the knee (Raiden keeps his usual punch and low kick there).
 - **Special moves and fatalities** take MK CD's own motions with these buttons (Z where MK says
   Block). Where MK names a punch either punch does it, as on MK CD.
 
@@ -98,7 +99,7 @@ For MK fighters:
 | Sub-Zero | ice blast: down, toward + punch; slide: back + A + B | toward, down, toward + punch |
 | Liu Kang | fireball: toward, toward + punch; flying kick: toward, toward + B | down, back, up, toward, down |
 | Kano | knife: hold Z: back, toward; cannonball: toward, down, back, up | back, back + punch |
-| Sonya | rings: Y, back, punch; square wave: toward, back + punch; leg grab: up close, down + X + A + Z | toward, toward, back, back + Z |
+| Sonya | rings: Y, back, punch; square wave: toward, back + punch; leg grab: up close, down + X + A | toward, toward, back, back + Z |
 
 (punch: X or Y)
 

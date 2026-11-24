@@ -8,7 +8,8 @@ re-saves build/states/menu.state. In parallel where it can be (--jobs). Among th
   - the test suite (tools/play.py test --no-build)
   - the finisher blocks (tools/checks/finishercheck.py)
   - each MK fatality vs Shadow, as player 1 and as player 2 - there with the other punch, where his input
-    has one (tools/lib/mkfatalitycheck.py) - and in a mirror match won by player 2
+    has one (tools/lib/mkfatalitycheck.py) - and in a mirror match won by player 2; quick taps at every
+    timing (Scorpion's and Liu Kang's: the two fatality readers)
   - each against the CPU and in a mirror match: no freeze (tools/checks/fightcheck.py)
   - the Pit's fall with each MK winner (tools/checks/pitcheck.py)
   - the one-player Contest with each: 10 matches, then to the end of the ladder
@@ -23,6 +24,7 @@ re-saves build/states/menu.state. In parallel where it can be (--jobs). Among th
   - Sub-Zero's ice blast freezes, a blocked one doesn't (tools/checks/icecheck.py)
   - MK fighters' back + B is the roundhouse and back + A the sweep; the CPU's play unchanged (tools/checks/backkickcheck.py)
   - MK fighters throw with B up close, as MK CD's high kick (tools/checks/kickthrowcheck.py)
+  - up close, X and Y are MK CD's close punch and A its knee (tools/checks/closemovecheck.py)
   - Johnny Cage's split punch on down + B, his down + Z a Block (tools/checks/splitpunchcheck.py)
   - the specials that name a punch take either punch, as on MK CD (tools/checks/eitherpunchcheck.py)
   - the spear's sounds: the victim's scream at the hit, GET OVER HERE at the yank - Scorpion's and
@@ -118,6 +120,7 @@ def main():
                run('ice blast: freezes, not when blocked', PY + [T('icecheck.py')]),
                run('back + B roundhouse, back + A sweep', PY + [T('backkickcheck.py')]),
                run('up close, B throws (MK CD\'s throw)', PY + [T('kickthrowcheck.py')]),
+               run("up close, MK CD's close punch and knee", PY + [T('closemovecheck.py')]),
                run("Johnny's split punch: down + B", PY + [T('splitpunchcheck.py')]),
                run('specials with either punch', PY + [T('eitherpunchcheck.py')]),
                run('spear sounds', PY + [T('spearsoundcheck.py')]),
@@ -182,6 +185,13 @@ def main():
     for side in (0, 1):                  # two Scorpions: the double and the punch are each his own
         jobs.append((f'scorpion teleport (P{side + 1} mirror)',
                      PY + [T('teleportcheck.py'), 'scorpion', '--mirror'] + (['--as-p2'] if side else [])))
+    # quick taps (3 frames down, 4 up) at every timing of a 7-frame cycle, for both fatality readers
+    # (Scorpion's, and the one the others share): they run every other frame or third, and a tap EC
+    # showed for a frame in between was lost at 1 timing in 7
+    for who in ('scorpion', 'liukang'):
+        for wait in range(24, 31):
+            jobs.append((f'{who} fatality, input {wait} frames on', PY + [T('mkfatalitycheck.py'), who,
+                                                                        '--wait', str(wait)]))
     for who, grid in FIGHTERS.items():
         jobs.append((f'{who} daze (P1)', PY + [T('dazecheck.py'), who]))
         jobs.append((f'{who} daze (P2)', PY + [T('dazecheck.py'), who, '--as-p2']))

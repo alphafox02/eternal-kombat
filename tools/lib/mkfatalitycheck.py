@@ -55,7 +55,7 @@ def main():
                     help="a punch in his input is the other punch (X for Y, Y for X: MK CD takes either); others' as they are")
     ap.add_argument('--stage', help='stage mode (hex, $11-$22: tools/lib/duelstate.py --stage); default the game\'s')
     ap.add_argument('--back', type=int, default=0, help='frames he walks away after FINISH HIM, before the input')
-    ap.add_argument('--wait', type=int, default=30, help='frames from the daze to the input')
+    ap.add_argument('--wait', type=int, default=30, help='frames from the daze (and his punch over) to the input')
     ap.add_argument('--cpu', action='store_true', help='the loser is the CPU (a one-player duel)')
     ap.add_argument('--unlock', default='', help='fighter ids to show on the select grid first (duelstate.py --unlock): '
                     '16 Thanatos (then at 15 presses, the MK fighters after him one further)')
@@ -113,6 +113,10 @@ def main():
             break
     r = c.prg_ram()
     print(f'FINISH HIM: loser {"dazed" if dazed else "NOT dazed"} on {W(r, P2 + 0x76)} health')
+    for _ in range(90):                            # his punch over first (MK CD's close punch holds its
+        if W(c.prg_ram(), P1 + 0xBE) & 0x7FFF not in (1, 2, 0x20, 0x21):   # strike ~40 frames in all:
+            break                                  #  an input during it is lost, as on MK CD)
+        run(1)
     run(a.wait)
     if a.back:                                     # (from afar: MK's fatalities are done up close)
         r = c.prg_ram()

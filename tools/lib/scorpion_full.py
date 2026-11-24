@@ -546,6 +546,9 @@ def fit_boxes(pl, q, blade, scorpion, report):
 # strike frame -> the move whose poses' reach its box gets (both crouching
 # punches are MK CD's uppercut: down + Y strikes on 42:03, down + X on 40:09)
 SWEEP_STRIKES = {(0x42, 0x03): 'uppercut', (0x40, 0x09): 'uppercut'}
+# close strike frame -> the far move's strike frame whose reach its box gets (mkscripts MOVES: close X
+# $20 42:1C - far X 42:13, close Y $21 40:1D - far Y 40:37, close A $23 40:15 - far A 40:13)
+CLOSE_REACH = {(0x42, 0x1C): (0x42, 0x13), (0x40, 0x1D): (0x40, 0x37), (0x40, 0x15): (0x40, 0x13)}
 
 
 # art groups on Blade's projectile move ($34): Scorpion's spear, the others'
@@ -887,6 +890,13 @@ def build(pl, root):
                     ext = (ext[0], max([ext[1]] + [extents(cut[h][0])[1] for h in cut
                                                    if h and h[0] == SWEEP_STRIKES[(sid, f)]
                                                    and extents(cut[h][0])]), *ext[2:])
+                if (sid, f) in CLOSE_REACH and ext:
+                    # MK's close punch and knee are short (a fist at his head, a knee): EC plays them
+                    # from ~70 px, where they fell short (a dazed victim at 60-66 px never finished).
+                    # Their boxes reach as far as the far move's strike, as the close moves did before
+                    far = chosen.get(CLOSE_REACH[(sid, f)])
+                    if far and extents(cut[far][0]):
+                        ext = (ext[0], max(ext[1], extents(cut[far][0])[1]), *ext[2:])
                 fit_boxes(pl, q0, extents_raw(pl[q:t]), ext, report)
             rec = ecpl.piece_record(pieces) + b'\x80\x00'   # (Blade's last records run off the chunk's end)
             if q + len(rec) > end:

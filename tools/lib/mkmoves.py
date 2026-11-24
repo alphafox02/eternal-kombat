@@ -72,9 +72,13 @@ ACTIONS.update({
     'knockdown':   [hold('', 50, 'left'), hold('', 8, 'down'), hold('', 4, 'down+x'), hold('', 120)],
     'swept':       [hold('', 50, 'left'), hold('', 4, 'right+c'), hold('', 120)],
     # Scorpion close to Sub-Zero: throw
-    # walk into him, then toward + Z: MK CD's throw (measured: low punch up
-    # close is a jab; Sub-Zero lands ~120 px behind)
+    # walk into him, then toward + Z: MK CD's throw (Sub-Zero lands ~120 px
+    # behind; low punch up close is the close punch, close_punch below)
     'throw':       [hold('right', 60), hold('right+z', 3), hold('right', 3), hold('', 120)],
+    # up close, MK CD's own close moves: low punch (high punch plays the same) and low kick
+    # (Kano's close punch is his headbutt; Sonya's close low kick shows her far one's poses)
+    'close_punch': [hold('right', 70), hold('', 5), hold('a', 4), hold('', 65)],
+    'close_knee':  [hold('right', 70), hold('', 5), hold('c', 4), hold('', 65)],
 })
 for b in 'abcxyz':
     ACTIONS[f'btn_{b}'] = [hold(b, 4), hold('', 45)]

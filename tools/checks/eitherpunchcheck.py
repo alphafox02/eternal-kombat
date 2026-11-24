@@ -14,7 +14,7 @@ those fighters, in 2-player duels with Shadow, on both sides (player 1 faces rig
 The CPU's fighter reads none of it: a fight against a CPU Sub-Zero - through FINISH HIM (Shadow on her
 last point), where his fatality's button test is - plays out frame for frame the same with his list's
 punches put back to the single ones in memory and that test turned into a trap (a branch to itself:
-reached, he'd hang).
+reached, he'd hang). It ends in his win: Shadow finished, or (left alone) given out to EC's time-up.
 
     eitherpunchcheck.py [--fighters subzero,sonya] [--disc CUE]
 """
@@ -149,7 +149,8 @@ def cpu(c, disc, tmp, frames=2400):
             c.buttons[0] = {'right'} if t % 90 < 50 else {'b'} if t % 90 < 54 else {'left'} if t % 90 > 75 else set()
             c.run(1)
             r = c.prg_ram()
-            tr.append((MOVE(r, P[1]), W(r, P[1] + 0x4E), W(r, P[1] + 0x76), MOVE(r, P[0]), W(r, P[0] + 0x4E), W(r, P[0] + 0x76)))
+            tr.append((MOVE(r, P[1]), W(r, P[1] + 0x4E), W(r, P[1] + 0x76), MOVE(r, P[0]), W(r, P[0] + 0x4E), W(r, 0x31D28),
+                       W(r, P[0] + 0x76)))
         traces.append(tr)
     c.buttons[0] = set()
     if n != (1, 2):
@@ -161,8 +162,10 @@ def cpu(c, disc, tmp, frames=2400):
         bad.append(f'the CPU fight differs from frame {at} with the single punches and the trap')
     dazed = sum(1 for *_, hp in traces[0] if hp == 1)
     kinds = len({m for m, *_ in traces[0]})
-    if dazed < 30 or traces[0][-1][-1] != 0 or kinds < 5:
-        bad.append(f'the CPU fight showed too little ({dazed} frames of FINISH HIM, Shadow on {traces[0][-1][-1]} at the end, {kinds} moves)')
+    over = traces[0][-1][-1] == 0 or traces[0][-1][-2] == 2      # finished, or he won it when she gave out
+    if dazed < 30 or not over or kinds < 5:                       # (FINISH_CALLS: time-up, she stays on 1)
+        bad.append(f'the CPU fight showed too little ({dazed} frames of FINISH HIM, Shadow on {traces[0][-1][-1]} '
+                   f'and Sub-Zero on {traces[0][-1][-2]} wins at the end, {kinds} moves)')
     c.load_state(duel(disc, tmp, GRID['subzero'], SHADOW))      # the poke itself, on a human's
     c.run(30)
     single_punches(c, SLOT[0])

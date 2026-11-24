@@ -111,6 +111,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `allchecks.py` | Every check, for every MK fighter, on the current build (run after tools/build.py; it starts with the test suite, which boots the new disc and re-saves build/states/menu.state). |
 | `backkickcheck.py` | MK fighters' back + B is the roundhouse and back + A the sweep (as MK CD's away + kick), both sides; C, down + C, A, B as before; Sub-Zero's slide; a CPU fight unchanged. |
 | `blockcheck.py` | Does Z block for an MK fighter? |
+| `closemovecheck.py` | Up close, MK fighters' X and Y are MK CD's close punch (Kano's headbutt) and A its knee, both sides: the close moves' frames shown and the victim hurt (Raiden keeps the far ones: no room in his .PL). |
 | `contestcheck.py` | One-player Contest (the ladder) with a fighter: does it run from match to match without freezing? |
 | `dazecheck.py` | An MK fighter's FINISH HIM daze: MK's 7-pose sway (mkinputs.DAZE_FRAMES at MK's timing, DAZE_SEQ: ~10 frames a pose, looped). |
 | `deadscriptcheck.py` | MK fighters in random fights: a fighter's running script is never one of Blade's that his block replaces (the build keeps code in their bodies). |
@@ -127,7 +128,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `kanoheadcheck.py` | Check Kano's close punches in a real duel on either player side. |
 | `kanoknifecheck.py` | Check Kano's held-Block knife input on either player side. |
 | `kickthrowcheck.py` | MK fighters throw with B (the high kick) up close, as MK CD, on both sides; toward + Y still throws; C, A, down + B don't; the CPU's fighters never run the code. |
-| `leggrabcheck.py` | Sonya's leg grab (MK CD: down + LP + LK + Block, close; here down + X + A + Z). |
+| `leggrabcheck.py` | Sonya's leg grab (MK CD: down + LP + LK, close; here down + X + A), with Z held too or not. |
 | `licensecheck.py` | Every tracked Python file has the MIT licence tag (SPDX) and LICENSE is there. |
 | `menumusiccheck.py` | The title left alone (4 min 55 s, until EC's intro video): EC's song, then MK's Mortal Monday music (MK CD track 20), never the fight cues after them on the track. |
 | `pitcheck.py` | Does the Pit's fall work for every pairing? |

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Sonya's leg grab (MK CD: down + LP + LK + Block, close; here down + X + A + Z).
+"""Sonya's leg grab (MK CD: down + LP + LK, close, Block held or not; here down + X + A, Z or not).
 
 From a 2-player duel (Sonya vs Shadow, made here with tools/lib/duelstate.py):
   - out of range: no throw (EC's own attack for the buttons);
-  - close: EC's throw (move $0D) showing her leg grab's arch (mkinputs.leg_plan),
-    the victim thrown and damaged;
+  - close, down + X + A and down + X + A + Z: EC's throw (move $0D) showing her leg grab's arch
+    (mkinputs.leg_plan), the victim thrown and damaged;
   - then an ordinary throw (toward + Y): her throw's poses again, not the leg grab's.
 
     leggrabcheck.py [--as-p2] [--state STATE]
@@ -56,7 +56,7 @@ def main():
                 frames_seen.add(W(r, me + 0x1A))
         return states, frames_seen
 
-    far_states, _ = act({'down', 'x', 'a', 'z'})
+    far_states, _ = act({'down', 'x', 'a'})
     far_ok = mkinputs.THROW_MOVE not in far_states
     print(f'out of range ({abs(X(him) - X(me))} px): {"no throw" if far_ok else "THREW"}')
     for _ in range(120):
@@ -66,12 +66,17 @@ def main():
         c.run(2)
     c.buttons[port] = set()
     c.run(10)
-    hp = W(c.prg_ram(), him + 0x76)
-    st, seen = act({'down', 'x', 'a', 'z'})
-    dmg = hp - W(c.prg_ram(), him + 0x76)
-    close_ok = mkinputs.THROW_MOVE in st and ARCH in seen and not (seen & THROW - LEG) and dmg > 0
-    print(f'close: throw {mkinputs.THROW_MOVE in st}, arch shown {ARCH in seen}, '
-          f'throw poses {sorted(hex(f) for f in seen & THROW - LEG)}, damage {dmg}')
+    near = c.snapshot()
+    close_ok = True
+    for btn in (('down', 'x', 'a'), ('down', 'x', 'a', 'z')):
+        c.restore(near)
+        hp = W(c.prg_ram(), him + 0x76)
+        st, seen = act(set(btn))
+        dmg = hp - W(c.prg_ram(), him + 0x76)
+        ok_ = mkinputs.THROW_MOVE in st and ARCH in seen and not (seen & THROW - LEG) and dmg > 0
+        close_ok &= ok_
+        print(f'close, {" + ".join(btn)}: throw {mkinputs.THROW_MOVE in st}, arch shown {ARCH in seen}, '
+              f'throw poses {sorted(hex(f) for f in seen & THROW - LEG)}, damage {dmg}')
     c.run(120)                                    # (she gets up)
     for _ in range(120):
         if abs(X(him) - X(me)) < 50:

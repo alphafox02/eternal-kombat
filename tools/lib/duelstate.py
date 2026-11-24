@@ -78,7 +78,7 @@ def main():
         c.run(300)
     c.press(['start']); c.run(400)
     c.press(['start'])
-    tmp = a.out + '.tmp'
+    tmp = f'{a.out}.{os.getpid()}.tmp'                 # (checks run in parallel can make the same state)
     W = lambda r: int.from_bytes(r[P1 + 0x4E:P1 + 0x50], 'big', signed=True)
     for t in range(0, 3000, 10):
         c.run(10)
@@ -92,8 +92,8 @@ def main():
         x_walk = W(c.prg_ram())
         c.load_state(tmp)
         if x_walk - x_idle >= 4:                       # the input itself moved him
-            c.save_state(a.out)
-            os.remove(tmp)
+            c.save_state(tmp)
+            os.replace(tmp, a.out)                     # whole or not at all
             print(f'duel live after {t} frames; saved {os.path.relpath(a.out, ROOT)}')
             return
     os.remove(tmp)
