@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib
 from disc import Disc, copy_disc
 from inputs import ROOT, scan
 from patches import PATCHES
-from cdaudio import add_mk_jingle, add_stage_music
+from cdaudio import add_mk_jingle, add_stage_music, add_stage_tracks
 
 NAME = 'Eternal Kombat'
 OUT = os.path.join(ROOT, 'build', NAME)
@@ -53,6 +53,7 @@ def main():
     if 'mk_us' in found:
         add_mk_jingle(cue, found['mk_us'].cue)
         add_stage_music(cue, found['mk_us'].cue)
+        add_stage_tracks(cue, found['mk_us'].cue)
     ec = Disc(cue)
     for name, doc, fn in PATCHES:
         if name in a.skip:

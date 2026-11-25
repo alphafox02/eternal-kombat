@@ -42,6 +42,7 @@ What you run: find your discs, make `extracted/` from them, build the disc, play
 | `mkframes.py` | Draw any MK fighter frame by number (docs/research/reproducibility_2026-11.md). |
 | `mkfromrecipes.py` | Rebuild MK captures from their recipes in data/mk_recipes/, drawing the frames from your MK disc. |
 | `mklair_disc.py` | MK's Goro's Lair (the stage of MK's Shang Tsung fight), decoded from the MK disc's BACKGD6.BIN. |
+| `mkstage_disc.py` | MK's Courtyard, Palace Gates, Warrior Shrine and Throne Room, decoded from the MK disc's BACKGDn.BIN: tiles and colours from the disc, laid out by data/mk_stages/ (where MK puts each tile: numbers only); `--check` against MK's own planes. |
 | `mkpit_disc.py` | Rebuild the MK Pit fight planes and palette from disc data. |
 | `mkpitbottom.py` | Extract MK CD's Pit bottom (spikes, heads, impaled body): the scene the Pit fatality scrolls down to when the loser is uppercut off the bridge. |
 | `mkportraits_disc.py` | Rebuild the seven select portraits from MK CD's RJC.PRG. |
@@ -68,6 +69,8 @@ What you run: find your discs, make `extracted/` from them, build the disc, play
 | `ecpl2.py` | EC .PL art banks: an optimal (dynamic-programming) parse over every opcode family of EC's unpacker (SUB.BIN $11784), with the dictionary chosen by measured use. |
 | `ecprobe.py` | Record which sheet frames an EC fighter uses for each action, by playing the actions in a 2-player duel. |
 | `ecstage.py` | Eternal Champions CD stages: read, render and build NAME.BG / NAME.BGI. |
+| `mkstages.py` | MK CD's five other stages as EC stages in one stage mode (packed files, a dispatcher, each init's rest generated from MK's measured scroll bands), and the pick: an MK fighter's fight is on one of MK's six at random. |
+| `stageinit.py` | A stage's init (SUB.BIN) moved after its file loads into its .BGI: bsr/bra out become jsr/jmp, branches re-aimed, its palette table with it. |
 | `ectitle.py` | The title screen's logo says ETERNAL KOMBAT: EC's own letters rearranged in the title picture's tiles (GAME.DAT) and four spare palette slots (GAME.CO); --preview, --measure (the plane's map, data/ec_title/). |
 | `ecunpack.py` | Run EC's own unpacker (SUB.BIN $11784) on a .PL resource, whole frame at once (d6 bit 6 = no yield). |
 | `finishvideo.py` | Record Scorpion's FINISH HIM -> fatality as a shareable clip (with sound). |
@@ -112,6 +115,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `backkickcheck.py` | MK fighters' back + B is the roundhouse and back + A the sweep (as MK CD's away + kick), both sides; C, down + C, A, B as before; Sub-Zero's slide; a CPU fight unchanged. |
 | `blockcheck.py` | Does Z block for an MK fighter? |
 | `closemovecheck.py` | Up close, MK fighters' X and Y are MK CD's close punch (Kano's headbutt) and A its knee, both sides: the close moves' frames shown and the victim hurt (Raiden's A stays his low kick: no room in his .PL). |
+| `mkstagecheck.py` | Each of MK's five other stages in our build as MK shows it: its MK music, the fighters' feet line, the camera's range, every band's scroll between the camera's stops, and the background at both stops against MK's (from its planes and bands). |
 | `contestcheck.py` | One-player Contest (the ladder) with a fighter: does it run from match to match without freezing? |
 | `dazecheck.py` | An MK fighter's FINISH HIM daze: MK's 7-pose sway (mkinputs.DAZE_FRAMES at MK's timing, DAZE_SEQ: ~10 frames a pose, looped). |
 | `deadscriptcheck.py` | MK fighters in random fights: a fighter's running script is never one of Blade's that his block replaces (the build keeps code in their bodies). |
@@ -132,6 +136,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `licensecheck.py` | Every tracked Python file has the MIT licence tag (SPDX) and LICENSE is there. |
 | `menumusiccheck.py` | The title left alone (4 min 55 s, until EC's intro video): EC's song, then MK's Mortal Monday music (MK CD track 20), never the fight cues after them on the track. |
 | `pitcheck.py` | Does the Pit's fall work for every pairing? |
+| `stagepickcheck.py` | Which stage a fight is on, every case (bosses, EC vs EC, an MK fighter in the Contest, Duel and Tournament, the Duel's BACKGROUND SETTING, Reptile's match), running the built SUB.BIN's pick under unicorn. |
 | `pitstartcheck.py` | Reptile's fight starts on the Pit's bottom (never a frame on the bridge with him there); a plain Pit fight stays on the bridge. |
 | `poolcheck.py` | No free effect object (patches.ec_object_pool): with EC's free count held at 0, fighters trade hits for 400 frames and the sub CPU and object list survive. |
 | `reptilecheck.py` | Reptile (fighter 26, MK's secret) in a duel against Kano on the Pit's bottom: his ice blast, slide and spear. |
@@ -165,6 +170,9 @@ Captures and measurements on the user's MK disc that made `data/` (recipes, soun
 | `mkfataltrial.py` | Find an MK CD fatality's input by trying candidates, each matched against the start of MK's fatality music (CD track 13). |
 | `mkmovesounds.py` | Which MK CD samples does each move play, and when? |
 | `mkpitstate.py` | Make build/states/mk_pit_raw.state: Kano vs Kano at the start of a fight on MK's Pit, where the Pit tools start. |
+| `mkstagestates.py` | MK CD's 2-player battles in its stage order: a state at the start of each and the MK track it plays (build/states/mk_battle_<n>.state). |
+| `mkstagecamera.py` | MK CD's camera on each stage: its left and right stops, and each plane's scroll bands (lines, rate, scroll at the left stop), from the battle states. |
+| `mkstagemaps.py` | MK CD's stages as numbers: each plane's name table at a fight's start, BACKGDn's tile base in VRAM, the tiles MK animates, and its camera (data/mk_stages/). |
 | `mkreptileref.py` | MK CD's own Reptile fight, as the reference for ours. |
 | `mksch_probe.py` | Locate an MK fighter's untouched .SCH bytes in a live fight state. |
 | `mkselectstate.py` | Make build/states/mk_select.state from a cold boot of the user's MK CD (US): the character-select screen every MK capture starts from (tools/capture/mkduelstate.py). |

@@ -38,11 +38,28 @@ def main():
                          "the Contest's boss): written over player 2's pick ($142A(a6) = id - 2) once both picked")
     ap.add_argument('--stage', type=lambda v: int(v, 16),
                     help="stage mode to fight on (hex, $11-$22; 13 = Blast's, 1F = the Pit (the Senator's)): "
-                         "written over GAME.CO's stage-by-fighter table ($C28) in RAM once both picked")
+                         "written over GAME.CO's stage-by-fighter table ($C28) in RAM once both picked, and over "
+                         "the MK stages' pick's (an MK fighter's fight is on it too)")
+    ap.add_argument('--mk-stage', help="with an MK fighter in it, the fight is on this MK stage (mkstages.STAGES' "
+                    "keys: courtyard, gates, shrine, pit, throne, lair): the pick's tables (SUB.BIN) all say it")
     a = ap.parse_args()
     c = scd.Core(saves=os.path.join(ROOT, 'build', 'shots', 'duel-saves'))
     c.load(a.disc)
     c.load_state(os.path.join(ROOT, 'build', 'states', 'menu.state'))
+    if a.mk_stage or a.stage:
+        # the pick (mkstages.py) puts an MK fighter's fight on a random MK stage: its tables all say
+        # this one (an MK stage by key, or --stage's mode)
+        import mkstages, patches
+        pit = patches.PIT_MODE
+        keys = [k for k, _, _ in mkstages.STAGES]
+        table = b''.join((pit if k == 'pit' else mkstages.MODE).to_bytes(2, 'big') for k in keys) + \
+            bytes(mkstages.PACKED.index(k) if k in mkstages.PACKED else 0 for k in keys)
+        at = c.prg_ram().find(table, 0x6000, 0x14000)
+        assert at > 0, "the MK stages' pick tables aren't in SUB.BIN (an older build?)"
+        k = a.mk_stage
+        mode = a.stage if not k else pit if k == 'pit' else mkstages.MODE
+        c.poke_prg(at, mode.to_bytes(2, 'big') * len(keys)
+                   + bytes([mkstages.PACKED.index(k) if k in mkstages.PACKED else 0]) * len(keys))
     if a.unlock:
         mask = int.from_bytes(c.prg_ram()[0x31CC8:0x31CCC], 'big')
         for fid in a.unlock:

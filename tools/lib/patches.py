@@ -2808,6 +2808,13 @@ def pit_no_shadows(ec, sources):
                       expect=bytes.fromhex('0c6e00180ab2'))
 
 
+@patch('mk-stages', "MK CD's Courtyard, Palace Gates, Warrior Shrine, Throne Room and Goro's Lair as EC stages (with MK's music); "
+                   "a fight with an MK fighter is on one of MK's six stages at random (tools/lib/mkstages.py)")
+def mk_stages(ec, sources):
+    import mkstages
+    mkstages.patch(ec, sources)
+
+
 @patch('cd-ai-stack', "Keep the disc transfer from overwriting the interrupt stack during large AI loads")
 def cd_ai_stack(ec, sources):
     """EC loads AI at $40800, rounding the disc read up to whole sectors.
@@ -3386,7 +3393,7 @@ def cd_times(ec, sources, first=True):
     if 'mk_us' not in sources:
         return
     parts = cdaudio.mk_jingle(sources['mk_us'].cue)
-    appended = sum(cdaudio.jingle_gap(i) + len(p) // RAW for i, p in enumerate(parts))
+    appended = sum(cdaudio.jingle_gap(i) + len(p) // RAW for i, p in enumerate(parts)) + cdaudio.JINGLE_TAIL
     lba, seen = 0, set()
     for t in ec.tracks:
         if t.file in seen:

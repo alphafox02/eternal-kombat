@@ -15,7 +15,8 @@ the evidence for each, are in [notes/2026-11.md](notes/2026-11.md).
 2. **`tools/build.py`** copies your EC disc and applies `tools/lib/patches.py`'s patches in order:
    - files inside the ISO9660 data track are rewritten in place, and sector checksums
      recomputed;
-   - MK music is appended to EC's last CD track; one other track is swapped for MK's Pit music.
+   - MK music is appended to EC's last CD track; one other track is swapped for MK's Pit music, and MK's
+     other stage tracks are added as tracks 20-22.
 
    The same inputs give the same disc, byte for byte.
 3. **`tools/checks/allchecks.py`** plays the built disc in Genesis Plus GX (`tools/lib/scd.py`,

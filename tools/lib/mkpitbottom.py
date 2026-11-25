@@ -58,7 +58,8 @@ def rnc1(data, off=0):
     """Unpack an RNC ProPack method-1 block at data[off]."""
     assert data[off:off + 4] == b'RNC\x01', data[off:off + 4]
     ulen = int.from_bytes(data[off + 4:off + 8], 'big')
-    lw = lambda q: data[q] | data[q + 1] << 8 if q + 1 < len(data) else 0
+    # (a block can end on an odd byte at the file's end: BACKGD5.BIN's last; that byte still counts)
+    lw = lambda q: (data[q] if q < len(data) else 0) | (data[q + 1] << 8 if q + 1 < len(data) else 0)
     s = dict(buf=lw(off + 18), cnt=16, p=off + 18)
 
     def adv(n):
@@ -113,7 +114,26 @@ def rnc1(data, off=0):
             back, n = huf(dist) + 1, huf(length) + 2
             for _ in range(n):
                 out.append(out[-back])
-    return bytes(out[:ulen])
+    out = bytes(out[:ulen])
+    assert crc16(out) == int.from_bytes(data[off + 12:off + 14], 'big'), f'RNC block at {off:#x}: bad unpack'
+    return out
+
+
+_CRC = []
+
+
+def crc16(data):
+    """RNC's CRC-16 (reflected polynomial $A001), as its header holds for the unpacked data."""
+    if not _CRC:
+        for i in range(256):
+            v = i
+            for _ in range(8):
+                v = (v >> 1) ^ 0xA001 if v & 1 else v >> 1
+            _CRC.append(v)
+    c = 0
+    for b in data:
+        c = _CRC[(c ^ b) & 0xFF] ^ (c >> 8)
+    return c
 
 
 def rgb(words):

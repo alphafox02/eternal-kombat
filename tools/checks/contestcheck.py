@@ -17,7 +17,7 @@ a freeze is a picture still for 20 s in spite of those.
         ending; the sheet shows it (a picture every 10 s). ok = the Dark Champion
         was met and the fighter's MK ending (patches.mk_endings) was loaded
     contestcheck.py GRID --ending --throws
-        the same, walking up to the Dark Champion and throwing him: only a throw knocks him out (his health
+        the same, walking up to the Dark Champion and throwing him (B up close): only a throw knocks him out (his health
         kept where a punch or kick can't)
 """
 import argparse, os, sys
@@ -102,9 +102,9 @@ def contest(grid, matches, frames, sheet=None, frozen_state=None, ending=False, 
             hit = ATTACKS[f // 24 % len(ATTACKS)] if ending else {'x'}
             toward = 'right' if W(r, P2 + 0x4E) > W(r, P1 + 0x4E) else 'left'   # (always right: the Dark Champion
             c.buttons[0] = {toward} if k < 12 else (hit if k < 15 else set())  #  teleports behind and was never reached)
-            if thrown:                                      # walk up to him; next to him: the throw (toward + HP)
-                near = abs(W(r, P2 + 0x4E) - W(r, P1 + 0x4E)) < 70
-                c.buttons[0] = {toward, 'y'} if near and k % 12 < 3 else {toward}
+            if thrown:                                      # walk up to him; next to him: MK's throw (B up close,
+                near = abs(W(r, P2 + 0x4E) - W(r, P1 + 0x4E)) < 70   #  kickthrowcheck; toward + Y is MK's close punch
+                c.buttons[0] = {toward, 'b'} if near and k % 12 < 3 else {toward}   #  now, closemovecheck)
                 if W(r, P2 + 0xBE) & 0x7FFF == 0x37:
                     throws_landed.add(f // 60)
         else:

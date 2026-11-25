@@ -390,6 +390,9 @@ def stale_files(ram, disc):
     for i, n in enumerate(names):
         if n in where:
             lba = int.from_bytes(ram[RUNTIME_FILES + 8 * i:RUNTIME_FILES + 8 * i + 4], 'big')
-            if lba != where[n][0]:
-                out.append((n, lba, where[n][0]))
+            start, size = where[n]
+            # (inside the file is fine: the MK stages' dispatcher points JET.BG / .BGI's entries at
+            #  one stage's part of the pack, mkstages.py)
+            if not start <= lba < start + max(1, (size + 2047) // 2048):
+                out.append((n, lba, start))
     return out

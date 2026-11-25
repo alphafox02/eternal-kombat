@@ -911,7 +911,7 @@ def _m68k_bgi(template_bgi, descriptors, palette_hw, settle=300, pit_fall=False)
 
 def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(0, 0), pit_fall=False,
           backdrop=0, layer_images=None, layer_prio=None, fixed_extra=None, fade=None,
-          blank_tile_slots=()):
+          blank_tile_slots=(), init=None, cell_prio=None):
     """Build NAME.BG and NAME.BGI for `stage` (whose init in SUB.BIN stays as is)
     from a front (plane A) and back (plane B) RGBA image in world pixels and a
     64-word cram (vdp.py packing). layer_images {layer id: RGBA in world
@@ -923,15 +923,18 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
     layers (and those layers' rows above y) use - the sky - become
     pit_fall's fade_mask (bit 31 = colour 0). blank_tile_slots: the
     template's tile chunks (by slot) cut to one blank tile (the replaced
-    stage's own sprite art, unused: file size and VRAM). Returns (bg_bytes,
-    bgi_bytes, report)."""
+    stage's own sprite art, unused: file size and VRAM). init: the init's
+    description (parse_init's) to build for instead of the stage's own (an
+    init generated elsewhere: mkstages.py). cell_prio {layer id: 2-D array of
+    0/1, one per cell of its art}: the priority bit cell by cell. Returns
+    (bg_bytes, bgi_bytes, report)."""
     layer_images = {k: np.asarray(v, np.uint8) for k, v in (layer_images or {}).items()}
     if template is None:
         template = load_template(stage)
     sub, tbg, tbgi = template['sub'], template['bg'], template['bgi']
     names = file_list(sub)
     mode = [m for m in STAGE_MODES if names[parse_init(sub, m)['bg_file'] or 0] == stage + '.BG'][0]
-    init = parse_init(sub, mode)
+    init = init or parse_init(sub, mode)
     bad = [r for r in init['bgi_refs'] if r[0] != 'descriptor']
     if bad:
         raise NotImplementedError(f'{stage}: init points into the BGI for {bad}')
@@ -990,6 +993,11 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
                         if c:
                             used[key].add(int(lines[cy, cx]) * 16 + int(c))
         layer_cells_by_id[lid] = _dedupe_tiles(idx, lines, tiles, lookup)
+        if lid in (cell_prio or {}):
+            m = np.asarray(cell_prio[lid], bool)
+            cells = layer_cells_by_id[lid]
+            h, w = min(m.shape[0], cells.shape[0]), min(m.shape[1], cells.shape[1])
+            cells[:h, :w][m[:h, :w]] |= 0x8000
         if lid in (layer_prio or {}):
             x0, y0, x1, y1 = layer_prio[lid]
             layer_cells_by_id[lid][y0 // 8:(y1 + 7) // 8, x0 // 8:(x1 + 7) // 8] |= 0x8000

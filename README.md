@@ -36,8 +36,12 @@ Sub-Zero, Liu Kang, Kano and Sonya**, in the slots Eternal Champions keeps for i
 - FINISH HIM / FINISH HER with MK's music, announcer and dazed sway, and every MK fighter's
   fatality, on Eternal Champions' fighters and MK's alike.
 - Eternal Champions' Vendettas and stage Overkills work on MK fighters too (their death art redrawn
-  from MK's).
-- MK's Pit as a stage, with the fall to the spikes.
+  from MK's), on Eternal Champions' stages.
+- MK CD's six stages, each with its MK music: the Courtyard, the Palace Gates, the Warrior Shrine,
+  the Pit (with the fall to the spikes), the Throne Room and Goro's Lair. A fight with an MK fighter
+  in it is on one of them at random, never the same one twice running; two Eternal Champions
+  fighters fight on Eternal Champions' stages as before. In a Duel, BACKGROUND SETTING can still
+  name an Eternal Champions stage for anyone (PLAYER 2: player 2's home).
 - The one-player mode (the Contest) for every MK fighter, through Eternal Champions' bosses to his
   MK ending, with **Shang Tsung** (MK's boss, taking his opponent's form) on the way and **Reptile**
   hidden as in MK; both become selectable once you've won it.
@@ -171,7 +175,7 @@ python3 tools/checkinputs.py             # finds and verifies your discs and BIO
 
 ### The MK fighters' data
 
-The build reads MK's fighters (poses, portraits, fatalities, sounds) and MK's Pit
+The build reads MK's fighters (poses, portraits, fatalities, sounds) and MK's stages
 from `extracted/`, made from your MK disc by
 
 ```
@@ -183,13 +187,15 @@ python3 tools/prepare.py                 # reads only your discs: no emulator, n
   (which MK frame, mirrored or not, where: numbers only, no art). Their anchors,
   timings and palette references are in `data/mk_meta/`. These rebuild the poses
   pixel for pixel.
-- **Portraits and the Pit:** decoded from MK's files on your disc.
+- **Portraits and the stages:** decoded from MK's files on your disc. Where MK puts each
+  stage tile on its screen, and how its camera scrolls each band, is in `data/mk_stages/`
+  (measured once from MK: numbers only, no art).
 - **Sounds:** the fatality sounds and the Pit fall's are rendered from MK's
   samples and CD tracks on your disc as MK plays them (`data/mk_sound/`:
   measured once on the pinned emulator core; byte for byte the recordings that
   were made by playing MK: `tools/lib/mksound_render.py --check`).
 
-Two fresh setups build the same disc, byte for byte (all 19 tracks and the cue).
+Two fresh setups build the same disc, byte for byte (all 22 tracks and the cue).
 
 A step whose output is there (and whose inputs haven't changed) is skipped, so an
 interrupted run picks up where it stopped; `--list` shows the steps.

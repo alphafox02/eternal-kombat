@@ -11,9 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from inputs import ROOT
 
 # MK's fatality music (MK CD track 13) is appended to EC's last track (19,
-# the menu music), after a second of silence. Tried and dropped: a 20th
-# track (EC fights freeze with 20 tracks; a longer disc is fine) and the
-# pregap of track 2 (emulators play pregaps as silence). The fatality starts
+# the menu music), after a second of silence. (Tried and dropped then: a 20th
+# track - fights seemed to freeze, which a cold-booted test later disproved:
+# STAGE_TRACKS below - and the pregap of track 2: emulators play pregaps as silence.) The fatality starts
 # it by disc time (BIOS MSCPLAYT): patches.fatality_music. (A menu left running can play on into
 # them: MENU_SONG_TRACK below.)
 MK_FATAL_TRACK = 13
@@ -225,3 +225,41 @@ def add_mk_jingle(cue, mk_cue):
         f.write(bytes(MENU_SONG_GAP * RAW) + menu_song(mk_cue) + bytes(MENU_TAIL * RAW))
         for i, part in enumerate(mk_jingle(mk_cue)):
             f.write(bytes(jingle_gap(i) * RAW) + part)
+        f.write(bytes(JINGLE_TAIL * RAW))
+
+
+# After the last part, silence: the CD plays on past a part's end, and track 19 is no longer the
+# disc's last (STAGE_TRACKS follow it): a last part left playing would run into MK's stage music.
+JINGLE_TAIL = 60 * 75
+
+
+# MK CD's stage tracks that aren't on EC's disc, as tracks 20-22 (mkstages.MK_TRACK_EC: the Warrior
+# Shrine and Goro's Lair play MK track 3, the Palace Gates 6, the Throne Room 7; the Courtyard plays
+# 4, the Pit's: STAGE_MUSIC). Each file whole, its 2 s pregap too (INDEX 01 00:02:00, as EC's).
+# (A note from before said EC fights froze on a 20-track disc: not so - a cold-booted 20-track disc
+# fights through rounds, KOs and the stats as the 19-track one; docs/notes/2026-11.md.)
+STAGE_TRACKS = {20: 3, 21: 6, 22: 7}  # our track -> MK's
+
+
+def add_stage_tracks(cue, mk_cue):
+    """Append STAGE_TRACKS to the disc: MK's files hard-linked (they never change) next to the cue."""
+    from disc import parse_cue
+    mk = {t.number: t for t in parse_cue(mk_cue)}
+    ours = parse_cue(cue)
+    assert max(t.number for t in ours) == JINGLE_TRACK, 'stage tracks: the disc should end at track 19'
+    name = os.path.splitext(os.path.basename(cue))[0]
+    lines = []
+    for n, m in sorted(STAGE_TRACKS.items()):
+        stem = f'{name} (Track {n:02d}).bin'
+        dst = os.path.join(os.path.dirname(cue), stem)
+        if os.path.exists(dst):
+            os.remove(dst)
+        try:
+            os.link(mk[m].file, dst)
+        except OSError:
+            import shutil
+            shutil.copyfile(mk[m].file, dst)
+        lines += [f'FILE "{stem}" BINARY', f'  TRACK {n:02d} AUDIO', '    INDEX 00 00:00:00', '    INDEX 01 00:02:00']
+    with open(cue, 'a', newline='\r\n') as o:
+        for line in lines:
+            o.write(line + '\n')

@@ -60,7 +60,9 @@ def steps():
     out += [("MK's Pit: its layers", ['mkpit_disc.py', '--out', E()], E('mk_stages', 'pit', 'plane_a.png')),
             ("MK's Pit: the bottom", ['mkpitbottom.py'], E('mk_stages', 'pit_bottom', 'pit_full.png')),
             ("MK's Pit: the fall's sound", ['mksound_render.py', 'pit'], E('mk_stages', 'pit_bottom', 'fall.wav')),
-            ("MK's Goro's Lair: its layers", ['mklair_disc.py', '--out', E()], E('mk_stages', 'lair', 'plane_a.png'))]
+            ("MK's Goro's Lair: its layers", ['mklair_disc.py', '--out', E()], E('mk_stages', 'lair', 'plane_a.png')),
+            ("MK's Courtyard, Palace Gates, Warrior Shrine and Throne Room: their layers",
+             ['mkstage_disc.py', '--out', E()], E('mk_stages', 'throne', 'prio.json'))]
     return out
 
 
@@ -70,6 +72,8 @@ FROM_DATA = (os.path.join('data', 'mk_meta'), os.path.join('data', 'mk_recipes')
 INPUTS = {'mkportraits_disc.py': ('tools/lib/mkpitbottom.py',),
           'mkpit_disc.py': ('tools/lib/mkpitbottom.py',),
           'mklair_disc.py': ('tools/lib/mkpitbottom.py', 'tools/lib/mkpit_disc.py'),
+          'mkstage_disc.py': ('tools/lib/mkpitbottom.py', 'tools/lib/mkpit_disc.py', 'tools/lib/mklair_disc.py',
+                              os.path.join('data', 'mk_stages')),
           'mkframes.py': ('tools/lib/mksch.py', 'tools/lib/mkspine_disc.py') + FROM_DATA,
           'mkfromrecipes.py': ('tools/lib/mkrecipes.py', 'tools/lib/mkframes.py', 'tools/lib/mksch.py',
                                'tools/lib/mkspine_disc.py', 'tools/lib/mkcapmeta.py', 'tools/lib/mkpalettes.py') + FROM_DATA,
