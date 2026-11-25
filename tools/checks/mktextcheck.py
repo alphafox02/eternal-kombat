@@ -6,6 +6,8 @@ For each stage (Scorpion against Shadow - FINISH HER - and against Larcen - FINI
   - FIGHT!: from the menu into a duel on the stage, the text's letters come up once the fight
     begins (EC's BEGIN CONTEST over) - six of them, growing (their frames change) - and are gone
     within MK's time; the fight goes on (player 1 moves);
+  - round 2: round 1 lost, FIGHT! again when round 2's fight begins (not at the fight flag's short
+    blink between the rounds);
   - FINISH HIM / HER: one round each, the loser on 3 health jabbed to FINISH HIM: within a few frames
     of the daze the word's letters come up (nine), drawn in the stage's red, grow, and are gone
     again within MK's time.
@@ -67,7 +69,7 @@ def fight(c, key, disc):
     if begins is None:
         return ['the fight never began (FIGHT_FLAG)']
     up = [f for f, n in enumerate(seen) if n >= 6]
-    if not up or not begins <= up[0] <= begins + 8:
+    if not up or not begins <= up[0] <= begins + 14:          # (the director waits 4 ticks of it)
         bad.append(f'FIGHT!: six letters {"at frame " + str(up[0]) if up else "never"} (the fight began at {begins})')
     elif up[-1] - up[0] > TEXT_TIME or any(seen[up[-1] + 4:]):
         bad.append(f'FIGHT!: up frames {up[0]}-{up[-1]}, not gone after')
@@ -78,6 +80,42 @@ def fight(c, key, disc):
     if W(c.prg_ram(), P1 + 0x4E) == x0:
         bad.append('after FIGHT!, player 1 doesn\'t move')
     return bad
+
+
+def round2(c, disc, tmp, key):
+    """Round 1 lost (a jab on 3 health), round 2's FIGHT! once its fight begins - not at the flag's
+    short blink between the rounds - and gone."""
+    st = os.path.join(tmp, f'{key}_r2.state')
+    subprocess.run([sys.executable, '-P', '-E', os.path.join(ROOT, 'tools', 'lib', 'duelstate.py'), '--disc', disc,
+                    '--p1', '20', '--p2', str(LARCEN), '--mk-stage', key, '--out', st], check=True, capture_output=True)
+    c.load_state(st)
+    c.run(30)
+    c.poke_prg(P2 + 0x76, (3).to_bytes(2, 'big'))
+    for _ in range(400):
+        r = c.prg_ram()
+        if abs(W(r, P2 + 0x4E) - W(r, P1 + 0x4E)) < 40:
+            break
+        c.buttons[0] = {'right'}
+        c.run(1)
+    c.buttons[0] = set()
+    c.run(20)
+    c.buttons[0] = {'x'}
+    c.run(4)
+    c.buttons[0] = set()
+    flag, seen = [], []
+    for _ in range(1500):
+        c.run(1)
+        flag.append(c.prg_ram()[mkstages.FIGHT_FLAG] & 0x40)
+        seen.append(len(letters(c)))
+    rises = [f for f in range(1, len(flag)) if flag[f] and not flag[f - 1]]
+    up = [f for f, n in enumerate(seen) if n >= 6]
+    if len(rises) < 2:
+        return [f'round 2: the fight never began again (flag rises {rises})']
+    begins = rises[-1]
+    if not up or not begins <= up[0] <= begins + 14 or up[-1] - up[0] > TEXT_TIME:
+        return [f'round 2: FIGHT!\'s letters {f"at {up[0]}-{up[-1]}" if up else "never"} (the fight began at {begins}, '
+                f'the flag rose at {rises})']
+    return []
 
 
 def finish(c, disc, tmp, key, victim):
@@ -128,7 +166,8 @@ def main():
         c = scd.Core(saves=os.path.join(tmp, 'saves'))
         c.load(a.disc)
         for key in a.stages.split(','):
-            bad = fight(c, key, a.disc) + finish(c, a.disc, tmp, key, SHADOW) + finish(c, a.disc, tmp, key, LARCEN)
+            bad = fight(c, key, a.disc) + round2(c, a.disc, tmp, key) + finish(c, a.disc, tmp, key, SHADOW) + \
+                finish(c, a.disc, tmp, key, LARCEN)
             print(f'{key}: ' + ('ok' if not bad else 'FAILED\n  ' + '\n  '.join(bad)), flush=True)
             failed |= bool(bad)
     print('MK text:', 'FAILED' if failed else 'ok')

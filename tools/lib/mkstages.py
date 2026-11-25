@@ -732,6 +732,7 @@ BG_MAX = 0x43000 - 0x37000        # a stage's .BG may reach $43000: the CD loade
 TEXT_SLOTS = 9                    # letter objects (FINISH HIM / HER: 9 letters; FIGHT!: 6)
 TEXT_SHEET, TEXT_SOURCE = 2, 2    # the host's sheet 2 and its tile source 2 (unused by the MK stages), ours
 FIGHT_FLAG = 0x28001              # PRG RAM: bit 6 set when EC's BEGIN CONTEST ends (-$7FFF(a6)): the fight begins
+FIGHT_ON = 4                      # ticks it must stay set (between rounds it's set for 6 frames)
 DAZED = 0x1F                      # a fighter's move when dazed (FINISH HIM's loser, on 1 health)
 P1, P2 = 0x2E188, 0x2E330
 MK_TEXT_RGB = {2: {12: (0, 0, 0), 13: (108, 36, 36), 15: (252, 0, 0)},      # MK's line 2: the red text
@@ -824,7 +825,8 @@ def text_chunks(line_rgb, where):
 def text_code(org, letter_desc, where):
     """The text director at org (an object's code). A task's registers don't last a sleep (EC's
     tasks keep their state in memory; a4 is the task's own block): each tick (a sleep, 2 frames) it
-    starts afresh from its variables. Idle: on the fight's start (FIGHT_FLAG's bit 6 rising, once)
+    starts afresh from its variables. Idle: on the fight's start (FIGHT_FLAG's bit 6 set FIGHT_ON
+    ticks after it was clear, once)
     it starts FIGHT!'s timeline; when a fighter is dazed on 1 health (FINISH HIM's loser, once)
     FINISH HIM's or FINISH HER's (FEMALE_MASK: his id $4C). Starting: as many letter objects as
     the word has (letter_desc: sheet TEXT_SHEET; their code: a VRAM block of 16 tiles, idle).
@@ -840,24 +842,28 @@ def text_code(org, letter_desc, where):
         a.l(0)
     a.w(0x08ED, 0x0006, 0x002A)                           # bset #6,$2A(a5)       itself hidden
     a.w(0x3B7C, 0x7000, 0x004E, 0x3B7C, 0x7000, 0x0052)
-    a.w(0x1039); a.l(FIGHT_FLAG)                          # move.b flag,d0
-    a.w(0x0200, 0x0040)                                   # andi.b #$40,d0
-    a.w(0x13C0); var('prev')                              # move.b d0,prev
+    # its variables (in the stage's code: they outlast a round, the director doesn't)
+    for name in ('fdone', 'kdone', 'on', 'armed'):
+        a.w(0x4239); var(name)                            # clr.b var
     a.w(0x4279); var('left')                              # clr.w left            (not playing)
     a.label('wait')
     a.w(0x7001); a.jsr(0x68D6)                            # sleep
     a.w(0x4A79); var('left')                              # tst.w left
     a.bccw(0x66, 'tick')                                  # bne.w tick            playing
     a.pcrel(0x103A, 'fdone')                              # move.b fdone(pc),d0
-    a.bcc(0x66, 'nofight')
+    a.bccw(0x66, 'nofight')
     a.w(0x1039); a.l(FIGHT_FLAG)                          # move.b flag,d0
     a.w(0x0200, 0x0040)                                   # andi.b #$40,d0
-    a.pcrel(0x123A, 'prev')                               # move.b prev(pc),d1
-    a.w(0x13C0); var('prev')                              # move.b d0,prev
-    a.w(0x4A00)                                           # tst.b d0
-    a.bcc(0x67, 'nofight')
-    a.w(0x4A01)                                           # tst.b d1              rising?
-    a.bcc(0x66, 'nofight')
+    a.bcc(0x66, 'set')
+    a.w(0x4239); var('on')                                # clear: clr.b on
+    a.w(0x13FC, 1); var('armed')                          #        move.b #1,armed
+    a.bccw(0x60, 'nofight')
+    a.label('set')                                        # set: only after it was clear here, and
+    a.pcrel(0x103A, 'armed')                              # for FIGHT_ON ticks (between rounds it
+    a.bccw(0x67, 'nofight')                               # comes on for 6 frames)
+    a.w(0x5239); var('on')                                # addq.b #1,on
+    a.w(0x0C39, FIGHT_ON); var('on')                      # cmpi.b #n,on
+    a.bccw(0x66, 'nofight')
     a.w(0x13FC, 1); var('fdone')                          # move.b #1,fdone
     a.w(0x207C); a.l(where['fight'])                      # movea.l #fight,a0
     a.bccw(0x60, 'start')
@@ -941,7 +947,7 @@ def text_code(org, letter_desc, where):
     a.w(0x42A9, 0xFFFC)                                   # clr.l -4(a1)
     a.dbra(7, 'gone')
     a.bccw(0x60, 'wait')
-    for name, size in (('prev', 1), ('fdone', 1), ('kdone', 1)):
+    for name, size in (('on', 1), ('armed', 1), ('fdone', 1), ('kdone', 1)):
         a.label(name); a.out += bytes(size)
     if len(a.out) & 1:
         a.out += b'\0'
