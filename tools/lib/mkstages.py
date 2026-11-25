@@ -98,7 +98,7 @@ def bands(key):
             if not strip[:, :, 3].any():
                 continue
             out.append(dict(plane=p, y=y0, h=y1 - y0, rate=b['rate'], art=strip,
-                            pprio=pix_prio[y0:y1][:, cols]))
+                            pprio=pix_prio[y0:y1][:, cols], parts=[(p, y0, y1, start, width)]))
     # contiguous bands of one plane at one rate: one layer
     merged = []
     for b in out:
@@ -109,6 +109,7 @@ def bands(key):
             last['art'] = np.concatenate([pad(last['art']), pad(b['art'])])
             last['pprio'] = np.concatenate([pad(last['pprio']), pad(b['pprio'])])
             last['h'] += b['h']
+            last['parts'] = last['parts'] + b['parts']
         else:
             merged.append(dict(b))
     # too many: the two neighbours (one plane) whose rates are closest share one (their mean)
@@ -122,7 +123,8 @@ def bands(key):
         pad = lambda x: np.pad(x, ((0, 0), (0, w - x.shape[1])) + ((0, 0),) * (x.ndim - 2))
         merged[i:i + 2] = [dict(plane=a['plane'], y=a['y'], h=a['h'] + b['h'], rate=rate,
                                 art=np.concatenate([pad(a['art']), pad(b['art'])]),
-                                pprio=np.concatenate([pad(a['pprio']), pad(b['pprio'])]))]
+                                pprio=np.concatenate([pad(a['pprio']), pad(b['pprio'])]),
+                                parts=a['parts'] + b['parts'])]
     for b in merged:
         # a cell is high priority when most of its drawn pixels are (the art's cells needn't fall
         # on MK's: a band's unwrapped start is any pixel)
@@ -133,6 +135,93 @@ def bands(key):
         hp[:b['h'], :b['art'].shape[1]] = (b['pprio'] > 0) & (b['art'][:, :, 3] > 0)
         b['cell_prio'] = (hp.reshape(h8, 8, w8, 8).sum((1, 3)) * 2 > drawn.reshape(h8, 8, w8, 8).sum((1, 3))).astype(np.uint8)
     return merged, (lo, hi)
+
+
+def layer_art(planes, b):
+    """A layer's art cut from planes (A, B: RGBA) as bands() cut it: its parts, each MK plane rows
+    unwrapped from the camera's left stop, one under another."""
+    arts = []
+    for p, y0, y1, start, width in b['parts']:
+        img = planes[p]
+        arts.append(img[y0:y1][:, (start + np.arange(width)) % img.shape[1]])
+    w = max(x.shape[1] for x in arts)
+    return np.concatenate([np.pad(x, ((0, 0), (0, w - x.shape[1]), (0, 0))) for x in arts])
+
+
+def state_planes(key, a=None, planes=None, cram=None):
+    """Per animation element, MK's planes (A, B: RGBA) with it in each of its states."""
+    from inputs import ROOT
+    if a is None:
+        path = os.path.join(ROOT, 'extracted', 'mk_stages', key, 'anim.json')
+        if not os.path.exists(path):
+            return []
+        a = json.load(open(path))
+        planes, cram, _ = art(key)
+    rgb = np.array([((v & 7) * 36, ((v >> 3) & 7) * 36, ((v >> 6) & 7) * 36) for v in cram], np.uint8)
+    base = _json(key)['tile_base']
+
+    def paint(pl, p, y, x, word, px):
+        t = np.array(px, np.uint8).reshape(8, 8)
+        if word & 0x800:
+            t = t[:, ::-1]
+        if word & 0x1000:
+            t = t[::-1]
+        cell = pl[p][y * 8:y * 8 + 8, x * 8:x * 8 + 8]
+        cell[:, :, :3] = rgb[((word >> 13) & 3) * 16 + t]
+        cell[:, :, 3] = (t > 0) * 255
+    out = []
+    for e in a['elements']:
+        states = []
+        for st in e['states']:
+            pl = {p: planes[p].copy() for p in 'AB'}
+            if e['kind'] == 'cells':
+                for (y, x), (word, px) in zip(e['cells'], st):
+                    paint(pl, e['plane'], y, x, word, px)
+            else:
+                for p, y, x, word in e['shows']:
+                    paint(pl, p, y, x, word, st[e['tiles'].index((word & 0x7FF) - base)])
+            states.append(pl)
+        out.append(states)
+    return out
+
+
+def animation(key, layers):
+    """MK's animation (extracted/mk_stages/<stage>/anim.json) in our layers: per element, its runs
+    (MK's own sequence: state, frames) and, per layer, its cells (those whose art changes between
+    its states) with their art in every state (RGBA 8 x 8)."""
+    from inputs import ROOT
+    path = os.path.join(ROOT, 'extracted', 'mk_stages', key, 'anim.json')
+    if not os.path.exists(path):
+        return []
+    a = json.load(open(path))
+    planes, cram, _ = art(key)
+    out = []
+    for e, states in zip(a['elements'], state_planes(key, a, planes, cram)):
+        cells = {}
+        for k, b in enumerate(layers):
+            arts = [layer_art(pl, b) for pl in states]
+            h8, w8 = arts[0].shape[0] // 8, arts[0].shape[1] // 8
+            for cy in range(h8):
+                for cx in range(w8):
+                    cs = [x[cy * 8:cy * 8 + 8, cx * 8:cx * 8 + 8] for x in arts]
+                    if any(not np.array_equal(cs[0], c_) for c_ in cs[1:]):
+                        cells[(k, cy, cx)] = cs
+        out.append(dict(runs=loop(e['runs']), cells=cells, nstates=len(states)))
+    return out
+
+
+ANIM_LOOP = 900                   # frames of MK's recorded animation looped (room: the Gates' torches' sequence)
+
+
+def loop(runs):
+    """MK's sequence (state, frames) up to ANIM_LOOP frames, its last run cut there."""
+    out, t = [], 0
+    for st, n in runs:
+        if t >= ANIM_LOOP:
+            break
+        out.append([st, min(n, ANIM_LOOP - t)])
+        t += n
+    return out
 
 
 def init_info(key, layers, cam, template_sub):
@@ -201,10 +290,10 @@ def body_code(org, info, floor, start_x, pal_hw, template_sub):
         pc += n
     a.w(0x303C, 2); a.jsr(0xC0FA)                           # wait 2
     a.jsr(0xB708)
-    d = info['descriptors'][0]
-    a.w(0x303C, d['d0']); a.w(0x323C, d['x']); a.w(0x343C, d['y'])
-    a.w(0x227C); a.l(d['addr'])                             # movea.l #descriptor,a1
-    a.jsr(0x1064A)
+    for d in info['descriptors']:                           # (the palette task's; the animation's)
+        a.w(0x303C, d['d0']); a.w(0x323C, d['x']); a.w(0x343C, d['y'])
+        a.w(0x227C); a.l(d['addr'] or 0)                    # movea.l #descriptor,a1
+        a.jsr(0x1064A)
     a.w(0x303C, 0x20); a.w(0x323C, 0); a.w(0x343C, 0); a.jsr(0x105E8)
     a.w(0x303C, 1); a.jsr(0xC0FA)                           # wait 1
     a.w(0x3D7C, floor, 0x1496)                              # move.w #floor,$1496(a6)
@@ -241,22 +330,178 @@ def build_stage(key, template_sub):
     keep = P['bg']['tile_slot']
     sprite_slots = tuple(sorted({W(tmpl['bg'], o + 0xA) // 8 for o, n, t in P['chunks'] if t == 0} - {keep}))
     lids = {o['id']: k for k, o in enumerate(info['objects'])}
-    bg, bgi, rep = ecstage.build(planes['A'], planes['B'], cram, stage=HOST, template=tmpl, init=info,
-                                 layer_images={lid: layers[k]['art'] for lid, k in lids.items()},
-                                 cell_prio={lid: layers[k]['cell_prio'] for lid, k in lids.items()},
-                                 backdrop=32, blank_tile_slots=sprite_slots)
+    anim = animation(key, layers)
+    # an animated cell's tile: shared by the cells with the same art in every state (the Courtyard's
+    # monks repeat 12 tiles along the row), each element's together
+    own, keyof = {}, {}
+    for e, el in enumerate(anim):
+        for (k, cy, cx), cs in el['cells'].items():
+            sig = (e, b''.join(c_.tobytes() for c_ in cs))
+            keyof.setdefault(sig, (e, len([1 for s_ in keyof if s_[0] == e])))
+            own.setdefault(info['objects'][k]['id'], {})[(cy, cx)] = keyof[sig]
+    extra = [np.concatenate([c_ for c_ in cs], 1) for el in anim for cs in el['cells'].values()]
+    kw = dict(stage=HOST, template=tmpl, init=info,
+              layer_images={lid: layers[k]['art'] for lid, k in lids.items()},
+              cell_prio={lid: layers[k]['cell_prio'] for lid, k in lids.items()},
+              backdrop=32, blank_tile_slots=sprite_slots, own_cells=own or None,
+              fit_extra=[np.concatenate(extra[i:i + 64], 1) for i in range(0, len(extra), 64)])
+    bg, bgi, rep = ecstage.build(planes['A'], planes['B'], cram, **kw)
+    if anim:
+        # every animated cell keeps one palette line in all its states: the line that draws them best
+        lines = {}
+        for e, el in enumerate(anim):
+            for (k, cy, cx), cs in el['cells'].items():
+                lid = info['objects'][k]['id']
+                if lid not in lines:
+                    lines[lid] = -np.ones(rep['cells'][lid].shape, int)
+                lines[lid][cy, cx] = ecstage.best_line(cs, rep['line_rgb'])
+        kw['cell_lines'] = lines
+    # MK's text: its sheet in place of the host's sheet 2 (its tiles in RAM, at the BG's start), in
+    # the stage's own reds - or MK's red put in the palette where it has none near
+    red = MK_TEXT_RGB[2][15]
+    near = min(sum((a - b) ** 2 for a, b in zip(red, rep['line_rgb'][0][k])) ** 0.5 for k in range(2, 16))
+    if near > TEXT_RED_NEAR:
+        kw['fixed_extra'] = {TEXT_RED: red}
+        bg, bgi, rep = ecstage.build(planes['A'], planes['B'], cram, **kw)
+    where = {}
+    kw['replace_chunks'] = text_chunks(rep['line_rgb'], where)
+    kw['blank_tile_slots'] = tuple(x for x in kw['blank_tile_slots'] if x != TEXT_SOURCE)
+    line_rgb = rep['line_rgb']
+    bg, bgi, rep = ecstage.build(planes['A'], planes['B'], cram, **kw)
+    assert rep['line_rgb'] == line_rgb, 'the palette moved between passes'
     lo, hi = cam
-    m = _json(key)
     start = (hi - lo) // 2
     floor = MK_FEET[key] + FLOOR_TO_FEET
     at = (len(bgi) + 1) & ~1
     org = ecstage.BGI_BASE + at
     pal_hw = [int(x, 16) for x in rep['pal_hw']]
-    body = body_code(org, info, floor, start, pal_hw, template_sub)
+    # the stage's tasks, each an object of its own (the host's first descriptor, its code ours):
+    # MK's animation (if any) and MK's text; the setup spawns them (placeholders first: same size)
+    tasks = (['anim'] if anim else []) + ['text']
+    host_desc = info['descriptors'][0]
+    spawn = lambda addrs: dict(info, descriptors=[host_desc] + [dict(host_desc, addr=a_) for a_ in addrs])
+    body = body_code(org, spawn([None] * len(tasks)), floor, start, pal_hw, template_sub)
     bgi = bgi + bytes(at - len(bgi)) + body
+    d0 = host_desc['addr'] - ecstage.BGI_BASE
+    template_desc = bytes(bgi[d0:d0 + 0x22])
+
+    def desc(code_at):
+        d = bytearray(template_desc)
+        d[0x1E:0x22] = code_at.to_bytes(4, 'big')
+        return bytes(d)
+    addrs = []
+    for t in tasks:
+        at = (len(bgi) + 1) & ~1
+        bgi = bgi + bytes(at - len(bgi))
+        desc_at = ecstage.BGI_BASE + at
+        if t == 'anim':
+            code = anim_code(desc_at + 0x22, anim, rep, info)
+            bgi += desc(desc_at + 0x22) + code
+        else:
+            code, _ = text_code(desc_at + 0x22, 0, where)             # (its size: the letters' descriptor after)
+            letter_at = desc_at + 0x22 + len(code)
+            code, letter_code = text_code(desc_at + 0x22, letter_at, where)
+            bgi += desc(desc_at + 0x22) + code + desc(letter_code)
+        addrs.append(desc_at)
+    body2 = body_code(org, spawn(addrs), floor, start, pal_hw, template_sub)
+    assert len(body2) == len(body)
+    bgi = bgi[:org - ecstage.BGI_BASE] + body2 + bgi[org - ecstage.BGI_BASE + len(body2):]
+    task = dict(elements=len(anim), text_frames=where['frames'], text_tiles=where['tiles'])
+    assert len(bg) <= BG_MAX, f'{key}: BG {len(bg)} bytes reaches the CD loader\'s stack ($43000)'
     assert len(bgi) <= ecstage.BG_BASE - ecstage.BGI_BASE, f'{key}: BGI {len(bgi)} bytes runs into its BG'
     return bg, bgi, dict(camera=info['camera'], entry=org, slot=P['bg']['slot']), \
-        dict(rep, layers=[(b['plane'], b['y'], b['h'], b['rate']) for b in layers])
+        dict(rep, layers=[(b['plane'], b['y'], b['h'], b['rate']) for b in layers], anim=task)
+
+
+STAGE_VRAM_TILE = 708             # VRAM tile of the stages' tile slot (9, Chin Wo's): tile n is at 708 + n (measured)
+ANIM_REC = 18                     # an element's record: timer, run, runs, runs table, states, VRAM address, bytes
+
+
+def anim_code(org, anim, rep, info):
+    """The animation task at org: every tick (a sleep: 2 frames) each element's timer counts down 2; at 0
+    or below its next run
+    (MK's sequence, looped) begins and that run's state's tiles are queued for VRAM ($CE1A: source,
+    VRAM address, bytes). An element's tiles are consecutive (build's own_cells), each state's
+    pixels one block. Starts each element on its last run so that the first frame puts run 0's
+    state in (a round restarting finds the tiles as the last round left them)."""
+    import mkinputs, ecstage
+    line_rgb = rep['line_rgb']
+    elems = []
+    for e, el in enumerate(anim):
+        tiles = sorted({t for key, t in rep['own_tiles'].items() if key[0] == e})
+        assert tiles == list(range(tiles[0], tiles[0] + len(tiles))), 'an element\'s tiles apart'
+        # each state's pixels, tile by tile (a tile: its key's cells' art in that state)
+        blocks = []
+        for s_ in range(el['nstates']):
+            data = bytearray(32 * len(tiles))
+            for (k, cy, cx), cs in el['cells'].items():
+                lid = info['objects'][k]['id']
+                word = int(rep['cells'][lid][cy, cx])
+                t = (word & 0x7FF) - tiles[0]
+                px = ecstage.quantize_cell(cs[s_], line_rgb[(word >> 13) & 3])
+                data[32 * t:32 * t + 32] = ecstage.encode_tiles([px])
+            blocks.append(bytes(data))
+        elems.append(dict(dest=(STAGE_VRAM_TILE + tiles[0]) * 32, size=32 * len(tiles), blocks=blocks, runs=el['runs']))
+    a = mkinputs.Asm(org)
+    a.w(0x08ED, 0x0006, 0x002A)                           # bset #6,$2A(a5)       its sprite hidden
+    a.w(0x3B7C, 0x7000, 0x004E, 0x3B7C, 0x7000, 0x0052)   # x, y = $7000
+    a.pcrel(0x45FA, 'elems')                              # lea elems(pc),a2      each starts at its last run
+    a.w(0x7E00 | (len(elems) - 1))                        # moveq #n-1,d7
+    a.label('init')
+    a.w(0x34BC, 1)                                        # move.w #1,(a2)        timer
+    a.w(0x356A, 4, 2)                                     # move.w 4(a2),2(a2)    run = runs
+    a.w(0x536A, 2)                                        # subq.w #1,2(a2)       - 1
+    a.w(0x45EA, ANIM_REC)                                 # lea REC(a2),a2
+    a.dbra(7, 'init')
+    a.label('loop')
+    a.pcrel(0x45FA, 'elems')                              # lea elems(pc),a2
+    a.w(0x7E00 | (len(elems) - 1))                        # moveq #n-1,d7
+    a.label('el')
+    a.w(0x5552)                                           # subq.w #2,(a2)        (a sleep is 2 frames)
+    a.bccw(0x6E, 'next')                                  # bgt.w next
+    a.w(0x302A, 2)                                        # move.w 2(a2),d0       the next run
+    a.w(0x5240)                                           # addq.w #1,d0
+    a.w(0xB06A, 4)                                        # cmp.w 4(a2),d0
+    a.bcc(0x6D, 'nowrap')                                 # blt.s
+    a.w(0x7000)                                           # moveq #0,d0
+    a.label('nowrap')
+    a.w(0x3540, 2)                                        # move.w d0,2(a2)
+    a.w(0xE548)                                           # lsl.w #2,d0
+    a.w(0x226A, 6)                                        # movea.l 6(a2),a1      runs table
+    a.w(0x3231, 0x0002)                                   # move.w 2(a1,d0.w),d1    its frames,
+    a.w(0xD352)                                           # add.w d1,(a2)           after what's left
+    a.w(0x3231, 0x0000)                                   # move.w 0(a1,d0.w),d1    its state
+    a.w(0xC2EA, 16)                                       # mulu.w 16(a2),d1      x bytes
+    a.w(0x202A, 10)                                       # move.l 10(a2),d0      states
+    a.w(0xD081)                                           # add.l d1,d0           its pixels
+    a.w(0x322A, 14)                                       # move.w 14(a2),d1      VRAM
+    a.w(0x342A, 16)                                       # move.w 16(a2),d2      bytes
+    a.jsr(0xCE1A)
+    a.label('next')
+    a.w(0x45EA, ANIM_REC)                                 # lea REC(a2),a2
+    a.dbra(7, 'el')
+    a.w(0x7001); a.jsr(0x68D6)                            # moveq #1,d0 ; jsr sleep
+    a.bccw(0x60, 'loop')
+    a.label('elems')
+    fix = []
+    for el in elems:
+        a.w(0, 0, len(el['runs']))
+        fix.append((len(a.out), 'runs')); a.l(0)
+        fix.append((len(a.out), 'states')); a.l(0)
+        a.w(el['dest'], el['size'])
+    code = bytearray(a.build())
+    for k, el in enumerate(elems):
+        if len(code) & 1:
+            code += b'\0'
+        runs_at = org + len(code)
+        code += b''.join(st.to_bytes(2, 'big') + n.to_bytes(2, 'big') for st, n in el['runs'])
+        states_at = org + len(code)
+        code += b''.join(el['blocks'])
+        o = fix[2 * k][0]
+        code[o:o + 4] = runs_at.to_bytes(4, 'big')
+        o = fix[2 * k + 1][0]
+        code[o:o + 4] = states_at.to_bytes(4, 'big')
+    return bytes(code)
 
 
 FLOOR_TO_FEET = -6                # $1496 = MK's feet line + this (ours stand 6 px below $1496, the camera's y at 0: measured)
@@ -475,3 +720,243 @@ def patch(ec, found):
         assert old[:2] == b'\x4e\xb9', f'${site:X}: not pit-no-shadows\' jsr'
         ec.patch_file('SUB.BIN', site - 0x6000, bytes.fromhex('4eb9') + labels['shadow'].to_bytes(4, 'big'), expect=old)
     print(f'        dispatcher and pick: {len(code)} of {room} bytes at ${org:X} (mode ${MODE:X}\'s init)')
+
+
+# ---------------------------------------------------------------- MK's FIGHT! and FINISH HIM / FINISH HER
+TEXT_EVENTS = ('fight', 'finish_him', 'finish_her')
+TEXT_RED = (0, 15)                # a stage whose colours have no red near MK's text gets it here (the Lair)
+TEXT_RED_NEAR = 60                # (distance of the nearest)
+TEXT_STEP = 8                     # a letter's sizes: MK's, to the nearest 8 px (MK shows ~5 per letter as it grows; room)
+BG_MAX = 0x43000 - 0x37000        # a stage's .BG may reach $43000: the CD loader's stack is there as it loads
+                                  # (patches.cd_ai_stack)
+TEXT_SLOTS = 9                    # letter objects (FINISH HIM / HER: 9 letters; FIGHT!: 6)
+TEXT_SHEET, TEXT_SOURCE = 2, 2    # the host's sheet 2 and its tile source 2 (unused by the MK stages), ours
+FIGHT_FLAG = 0x28001              # PRG RAM: bit 6 set when EC's BEGIN CONTEST ends (-$7FFF(a6)): the fight begins
+DAZED = 0x1F                      # a fighter's move when dazed (FINISH HIM's loser, on 1 health)
+P1, P2 = 0x2E188, 0x2E330
+MK_TEXT_RGB = {2: {12: (0, 0, 0), 13: (108, 36, 36), 15: (252, 0, 0)},      # MK's line 2: the red text
+               1: {12: (0, 0, 0), 13: (36, 36, 36), 15: (216, 216, 216)}}   # line 1: its grey flash
+
+
+def text_art(line_rgb):
+    """MK's text for a stage whose palette is line_rgb: the sheet's frames - each letter at each size
+    MK shows it (data/mk_text.json; drawn from PAC.PRG's letters, mktext.scale), red, and grey at
+    full size - their tiles, and each event's timeline: per tick (2 frames, MK's even frames), per
+    letter (in the word's order), [frame or None, x, y] on screen."""
+    import sys as _s
+    from inputs import ROOT
+    _s.path.insert(0, os.path.join(ROOT, 'tools', 'capture'))
+    import mktext
+    pac = open(os.path.join(ROOT, 'extracted', 'mk_us', 'PAC.PRG'), 'rb').read()
+    letters = mktext.pac_letters(pac)
+    data = json.load(open(os.path.join(ROOT, 'data', 'mk_text.json')))
+    # the stage's own colours nearest MK's (line 0, 2-15: never the HUD's - line 1, 10-15 - which EC
+    # changes at FINISH HIM, nor the fighters' shadow, line 0 colour 1)
+    maps = {}
+    for pal, want in MK_TEXT_RGB.items():
+        m = {}
+        for idx, c in want.items():
+            d = [sum((a - b) ** 2 for a, b in zip(c, line_rgb[0][k])) for k in range(2, 16)]
+            m[idx] = int(np.argmin(d)) + 2
+        maps[pal] = (0, m)
+    frames, index, tiles, tile_at = [], {}, [], {}
+
+    def frame(name, s, pal):
+        pal = 2                                           # (red throughout: MK's grey flash at full size would
+                                                          #  take 11 x 16 more tiles than the BG has room for)
+        s = min(32, max(TEXT_STEP, int(round(s / TEXT_STEP)) * TEXT_STEP))   # (MK's sizes to the nearest step: room)
+        key = (name, s, pal)
+        if key not in index:
+            img = mktext.scale(letters[name], s)
+            li, m = maps[pal]
+            out = np.zeros_like(img)
+            for idx, k in m.items():
+                out[img == idx] = k
+            # one piece: the tiles of the letter's bounding box (MK grows it from the top-left)
+            ys, xs = np.nonzero(out)
+            y0, y1 = int(ys.min()) // 8, int(ys.max()) // 8 + 1
+            x0, x1 = int(xs.min()) // 8, int(xs.max()) // 8 + 1
+            block = [out[cy * 8:cy * 8 + 8, cx * 8:cx * 8 + 8] for cx in range(x0, x1) for cy in range(y0, y1)]
+            b = b''.join(t.tobytes() for t in block)
+            if b not in tile_at:
+                tile_at[b] = len(tiles)
+                tiles.extend(block)
+            index[key] = len(frames)
+            frames.append([(x1 - x0, y1 - y0, 0x8000 | (li << 13) | tile_at[b], 8 * x0, 8 * y0)])
+        return index[key]
+    timelines = {}
+    for ev in TEXT_EVENTS:
+        ticks = []
+        for fr in data[ev][::2]:
+            ticks.append([[frame(r[0], r[3], r[4]), r[1], r[2]] for r in sorted(fr, key=lambda r: r[1])])
+        timelines[ev] = ticks
+    return tiles, frames, timelines
+
+
+def text_chunks(line_rgb, where):
+    """The sheet (TEXT_SHEET) and tile source (TEXT_SOURCE) chunks for ecstage.build's replace_chunks,
+    each event's timeline after the sheet's frames; where gets their RAM addresses (the BG at $37000):
+    {event: address}. A timeline: a word, its ticks; a word, its letters; per tick per letter:
+    frame (byte), y (byte), x (word)."""
+    import ecstage
+    tiles, frames, timelines = text_art(line_rgb)
+    makers = ecstage.raw_sheet(TEXT_SHEET, TEXT_SOURCE, tiles, frames)
+    sheet = makers[('sheet', TEXT_SHEET)]
+
+    def sheet_and_timelines(at):
+        c = bytearray(sheet(at))
+        for ev in TEXT_EVENTS:
+            if len(c) & 1:
+                c += b'\0'
+            where[ev] = ecstage.BG_BASE + at + len(c)
+            c += len(timelines[ev]).to_bytes(2, 'big') + len(timelines[ev][0]).to_bytes(2, 'big')
+            for tick in timelines[ev]:
+                for f, x, y in tick:
+                    c += bytes([0xFF if f is None else f, y & 0xFF]) + (x & 0xFFFF).to_bytes(2, 'big')
+        c[0:4] = len(c).to_bytes(4, 'big')
+        return bytes(c)
+    makers[('sheet', TEXT_SHEET)] = sheet_and_timelines
+    where['frames'] = len(frames)
+    where['tiles'] = len(tiles)
+    return makers
+
+
+def text_code(org, letter_desc, where):
+    """The text director at org (an object's code). A task's registers don't last a sleep (EC's
+    tasks keep their state in memory; a4 is the task's own block): each tick (a sleep, 2 frames) it
+    starts afresh from its variables. Idle: on the fight's start (FIGHT_FLAG's bit 6 rising, once)
+    it starts FIGHT!'s timeline; when a fighter is dazed on 1 health (FINISH HIM's loser, once)
+    FINISH HIM's or FINISH HER's (FEMALE_MASK: his id $4C). Starting: as many letter objects as
+    the word has (letter_desc: sheet TEXT_SHEET; their code: a VRAM block of 16 tiles, idle).
+    Playing: per tick each letter gets its frame ($1B), x = camera + x, y; at the end they're
+    removed ($82 bit 2, as the stages' own objects go)."""
+    import mkinputs
+    from mkinputs import FEMALE_MASK
+    a = mkinputs.Asm(org)
+    fix = []                                              # (offset of a long, label)
+
+    def var(name):                                        # an absolute long: a variable's address
+        fix.append((len(a.out), name))
+        a.l(0)
+    a.w(0x08ED, 0x0006, 0x002A)                           # bset #6,$2A(a5)       itself hidden
+    a.w(0x3B7C, 0x7000, 0x004E, 0x3B7C, 0x7000, 0x0052)
+    a.w(0x1039); a.l(FIGHT_FLAG)                          # move.b flag,d0
+    a.w(0x0200, 0x0040)                                   # andi.b #$40,d0
+    a.w(0x13C0); var('prev')                              # move.b d0,prev
+    a.w(0x4279); var('left')                              # clr.w left            (not playing)
+    a.label('wait')
+    a.w(0x7001); a.jsr(0x68D6)                            # sleep
+    a.w(0x4A79); var('left')                              # tst.w left
+    a.bccw(0x66, 'tick')                                  # bne.w tick            playing
+    a.pcrel(0x103A, 'fdone')                              # move.b fdone(pc),d0
+    a.bcc(0x66, 'nofight')
+    a.w(0x1039); a.l(FIGHT_FLAG)                          # move.b flag,d0
+    a.w(0x0200, 0x0040)                                   # andi.b #$40,d0
+    a.pcrel(0x123A, 'prev')                               # move.b prev(pc),d1
+    a.w(0x13C0); var('prev')                              # move.b d0,prev
+    a.w(0x4A00)                                           # tst.b d0
+    a.bcc(0x67, 'nofight')
+    a.w(0x4A01)                                           # tst.b d1              rising?
+    a.bcc(0x66, 'nofight')
+    a.w(0x13FC, 1); var('fdone')                          # move.b #1,fdone
+    a.w(0x207C); a.l(where['fight'])                      # movea.l #fight,a0
+    a.bccw(0x60, 'start')
+    a.label('nofight')
+    a.pcrel(0x103A, 'kdone')                              # move.b kdone(pc),d0
+    a.bccw(0x66, 'wait')
+    for P in (P1, P2):
+        a.w(0x3039); a.l(P + 0xBE)                        # move.w move,d0
+        a.w(0x0240, 0x7FFF)                               # andi.w #$7FFF,d0
+        a.w(0x0C40, DAZED)                                # cmpi.w #dazed,d0
+        a.bccw(0x66, f'n{P:x}')
+        a.w(0x0C79, 1); a.l(P + 0x76)                     # cmpi.w #1,health
+        a.bccw(0x6E, f'n{P:x}')                           # bgt.w
+        a.w(0x13FC, 1); var('kdone')                      # move.b #1,kdone
+        a.w(0x3239); a.l(P + 0x4C)                        # move.w id,d1
+        a.w(0x203C); a.l(FEMALE_MASK)                     # move.l #women,d0
+        a.w(0x0300)                                       # btst d1,d0
+        a.w(0x207C); a.l(where['finish_him'])             # movea.l #him,a0      (movea: flags kept)
+        a.bccw(0x67, 'start')
+        a.w(0x207C); a.l(where['finish_her'])             # movea.l #her,a0
+        a.bccw(0x60, 'start')
+        a.label(f'n{P:x}')
+    a.bccw(0x60, 'wait')
+    # start: a0 = the timeline: its ticks and letters, the letters spawned
+    a.label('start')
+    a.w(0x33D8); var('left')                              # move.w (a0)+,left     ticks
+    a.w(0x33D8); var('count')                             # move.w (a0)+,count    letters
+    a.w(0x23C8); var('ptr')                               # move.l a0,ptr
+    a.w(0x4279); var('k')                                 # clr.w k
+    a.label('spawn')
+    a.w(0x303C, 0x0388, 0x323C, 0x7000, 0x343C, 0x7000)   # d0 type, d1 x, d2 y (off screen)
+    a.w(0x227C); var('letter')                            # movea.l #letter,a1
+    a.jsr(0x1064A)                                        # (a0: the object; carry: none free)
+    a.w(0x55C4)                                           # scs d4
+    a.w(0x3239); var('k')                                 # move.w k,d1
+    a.w(0xE549)                                           # lsl.w #2,d1
+    a.pcrel(0x43FA, 'objs')                               # lea objs(pc),a1
+    a.w(0x4A04)                                           # tst.b d4
+    a.bcc(0x67, 'got')
+    a.w(0x91C8)                                           # suba.l a0,a0          (none: that letter left out)
+    a.label('got')
+    a.w(0x2388, 0x1000)                                   # move.l a0,(a1,d1.w)
+    a.w(0x5279); var('k')                                 # addq.w #1,k
+    a.w(0x3039); var('k')                                 # move.w k,d0
+    a.w(0xB079); var('count')                             # cmp.w count,d0
+    a.bcc(0x6D, 'spawn')                                  # blt.s spawn
+    a.bccw(0x60, 'wait')
+    # tick: each letter's frame and place, from ptr; then on (or the end)
+    a.label('tick')
+    a.w(0x2079); var('ptr')                               # movea.l ptr,a0
+    a.pcrel(0x43FA, 'objs')                               # lea objs(pc),a1
+    a.w(0x3E39); var('count')                             # move.w count,d7
+    a.w(0x5347)                                           # subq.w #1,d7
+    a.label('each')
+    a.w(0x2459)                                           # movea.l (a1)+,a2      the object
+    a.w(0x1018)                                           # move.b (a0)+,d0       frame
+    a.w(0x7200, 0x1218)                                   # moveq #0,d1 ; move.b (a0)+,d1   y
+    a.w(0x3418)                                           # move.w (a0)+,d2       x
+    a.w(0xB5FC); a.l(0)                                   # cmpa.l #0,a2
+    a.bcc(0x67, 'skip')
+    a.w(0x1540, 0x001B)                                   # move.b d0,$1B(a2)     its frame
+    a.w(0xD46E, 0xB070)                                   # add.w -$4F90(a6),d2   + camera
+    a.w(0x3542, 0x004E)                                   # move.w d2,$4E(a2)
+    a.w(0x3541, 0x0052)                                   # move.w d1,$52(a2)
+    a.label('skip')
+    a.dbra(7, 'each')
+    a.w(0x23C8); var('ptr')                               # move.l a0,ptr
+    a.w(0x5379); var('left')                              # subq.w #1,left
+    a.bccw(0x66, 'wait')
+    # the end: the letters removed
+    a.pcrel(0x43FA, 'objs')
+    a.w(0x3E39); var('count')
+    a.w(0x5347)
+    a.label('gone')
+    a.w(0x2459)                                           # movea.l (a1)+,a2
+    a.w(0xB5FC); a.l(0)
+    a.bcc(0x67, 'none')
+    a.w(0x357C, 0x7000, 0x004E)                           # move.w #$7000,$4E(a2)
+    a.w(0x08EA, 0x0002, 0x0082)                           # bset #2,$82(a2)       EC removes it
+    a.label('none')
+    a.w(0x42A9, 0xFFFC)                                   # clr.l -4(a1)
+    a.dbra(7, 'gone')
+    a.bccw(0x60, 'wait')
+    for name, size in (('prev', 1), ('fdone', 1), ('kdone', 1)):
+        a.label(name); a.out += bytes(size)
+    if len(a.out) & 1:
+        a.out += b'\0'
+    for name in ('left', 'count', 'k'):
+        a.label(name); a.out += bytes(2)
+    a.label('ptr'); a.out += bytes(4)
+    a.label('objs'); a.out += bytes(4 * TEXT_SLOTS)
+    a.label('letter_code')
+    a.w(0x303C, 0x0200); a.jsr(0x6942)
+    a.w(0x3B7C, 0x7000, 0x004E)
+    a.label('idle')
+    a.w(0x7001); a.jsr(0x68D6)
+    a.bcc(0x60, 'idle')
+    code = bytearray(a.build())
+    lab = lambda n: org + a.labels[n]
+    for at, name in fix:
+        code[at:at + 4] = (letter_desc if name == 'letter' else lab(name)).to_bytes(4, 'big')
+    return bytes(code), lab('letter_code')

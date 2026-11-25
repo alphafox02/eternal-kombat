@@ -37,8 +37,10 @@ Sub-Zero, Liu Kang, Kano and Sonya**, in the slots Eternal Champions keeps for i
   fatality, on Eternal Champions' fighters and MK's alike.
 - Eternal Champions' Vendettas and stage Overkills work on MK fighters too (their death art redrawn
   from MK's), on Eternal Champions' stages.
-- MK CD's six stages, each with its MK music: the Courtyard, the Palace Gates, the Warrior Shrine,
-  the Pit (with the fall to the spikes), the Throne Room and Goro's Lair. A fight with an MK fighter
+- MK CD's six stages, each with its MK music: the Courtyard (its monks swaying), the Palace Gates
+  (its torches burning), the Warrior Shrine, the Pit (with the fall to the spikes), the Throne Room
+  and Goro's Lair (the eyes blinking in the dark). On five of them, MK's FIGHT! and FINISH HIM /
+  FINISH HER zoom in as in MK. A fight with an MK fighter
   in it is on one of them at random, never the same one twice running; two Eternal Champions
   fighters fight on Eternal Champions' stages as before. In a Duel, BACKGROUND SETTING can still
   name an Eternal Champions stage for anyone (PLAYER 2: player 2's home).

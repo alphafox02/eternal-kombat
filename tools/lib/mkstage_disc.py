@@ -9,7 +9,8 @@ from MK at the fight's start (tools/capture/mkstagemaps.py). Lines 0 and 1 are P
 the Pit.
 
     mkstage_disc.py --out extracted        (tools/prepare.py runs this)
-        -> extracted/mk_stages/<stage>/plane_a.png, plane_b.png, cram.json, prio.json
+        -> extracted/mk_stages/<stage>/plane_a.png, plane_b.png, cram.json, prio.json, anim.json
+           (and the Lair's anim.json: its planes are mklair_disc.py's)
     mkstage_disc.py --check                (against MK's own planes, from the battle states)
 
 prio.json: each plane's high-priority cells (row-major, 32 x 128 of 0/1): MK's fighters are
@@ -69,6 +70,41 @@ def build(key, disc):
     return out
 
 
+def anim_states(key, disc):
+    """MK's animation on the stage (data/mk_stages/<stage>.json 'anim', recorded by
+    tools/capture/mkstagemaps.py) with its art from the disc: each element's states as pixels
+    (colour indices). A cell element (the Gates' torches, the Lair's eyes): per state, per cell,
+    [its name-table word, 64 indices]. A tile element (the Courtyard's monks): per state, per tile,
+    64 indices, and every plane cell showing those tiles ([plane, y, x, word])."""
+    m = json.load(open(ROOT / 'data' / 'mk_stages' / f'{key}.json'))
+    a = m.get('anim') or dict(elements=[], extra={}, frames=0)
+    bg = (disc / f'BACKGD{m["backgd"]}.BIN').read_bytes()
+    off = [int.from_bytes(bg[i:i + 4], 'big') for i in range(0, 24, 4)]
+    tiles = tiles_of(rnc1(bg, off[0]))
+    six = rnc1(bg, off[5]) if bg[off[5]:off[5] + 3] == b'RNC' else b''
+    extra = tiles_of(six) if six and len(six) % 32 == 0 else None
+    base = m['tile_base']
+
+    def tile(i):
+        if str(i) in a['extra']:
+            return extra[a['extra'][str(i)]]
+        return tiles[i - base]
+    out = []
+    for e in a['elements']:
+        if 'cells' in e:
+            out.append(dict(kind='cells', plane=e['plane'], cells=e['cells'], runs=e['runs'],
+                            states=[[[w, tile(w & 0x7FF).ravel().tolist()] for w in st] for st in e['states']]))
+        else:
+            want = set(e['tiles'])
+            shows = [[p, y, x, int(w)] for p in 'AB' for y, row in enumerate(m['planes'][p]) for x, w in enumerate(row)
+                     if w and (w & 0x7FF) - base in want]
+            states = []
+            for st in e['states']:
+                states.append([tiles_of(bg[o:o + 32])[0].ravel().tolist() for o in st])
+            out.append(dict(kind='tiles', tiles=e['tiles'], shows=shows, runs=e['runs'], states=states))
+    return json.dumps(dict(frames=a['frames'], elements=out), separators=(',', ':')).encode()
+
+
 def mk_planes(key):
     """MK's own planes (RGBA) and CRAM from the battle state, its HUD rows and other cells cleared."""
     import scd
@@ -96,8 +132,11 @@ def main():
     group.add_argument('--out', type=Path, metavar='EXTRACTED')
     a = ap.parse_args()
     bad = 0
-    for key in STAGES:
-        results = build(key, a.disc)
+    for key in STAGES + ('lair',):
+        results = build(key, a.disc) if key != 'lair' else {}       # (the Lair's planes: mklair_disc.py)
+        results["anim.json"] = anim_states(key, a.disc)
+        if key == 'lair' and not a.out:
+            continue
         if a.out:
             d = a.out / 'mk_stages' / key
             d.mkdir(parents=True, exist_ok=True)
@@ -112,6 +151,10 @@ def main():
             # cells showing a tile MK animates: any frame (ours is the file's)
             t = np.array(m['planes'][p])
             anim = np.kron(np.isin((t & 0x7FF) - m['tile_base'], list(animated)) & (t > 0), np.ones((8, 8), bool))
+            for e in m.get('anim', {}).get('elements', []):          # (cells MK animates by their words)
+                if e.get('plane') == p:
+                    for y, x in e['cells']:
+                        anim[y * 8:y * 8 + 8, x * 8:x * 8 + 8] = True
             seen = (ours[:, :, 3] > 0) | (theirs[:, :, 3] > 0)        # (clear pixels' colours don't count)
             diff = np.any(ours != theirs, axis=2) & seen & ~anim
             # colours by value: MK's CRAM lines 2-3 are the stage's

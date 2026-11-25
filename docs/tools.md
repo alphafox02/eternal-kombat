@@ -69,7 +69,7 @@ What you run: find your discs, make `extracted/` from them, build the disc, play
 | `ecpl2.py` | EC .PL art banks: an optimal (dynamic-programming) parse over every opcode family of EC's unpacker (SUB.BIN $11784), with the dictionary chosen by measured use. |
 | `ecprobe.py` | Record which sheet frames an EC fighter uses for each action, by playing the actions in a 2-player duel. |
 | `ecstage.py` | Eternal Champions CD stages: read, render and build NAME.BG / NAME.BGI. |
-| `mkstages.py` | MK CD's five other stages as EC stages in one stage mode (packed files, a dispatcher, each init's rest generated from MK's measured scroll bands), and the pick: an MK fighter's fight is on one of MK's six at random. |
+| `mkstages.py` | MK CD's five other stages as EC stages in one stage mode (packed files, a dispatcher, each init's rest generated from MK's measured scroll bands), their tasks (MK's animations; MK's FIGHT! and FINISH HIM / HER as stage sprites), and the pick: an MK fighter's fight is on one of MK's six at random. |
 | `stageinit.py` | A stage's init (SUB.BIN) moved after its file loads into its .BGI: bsr/bra out become jsr/jmp, branches re-aimed, its palette table with it. |
 | `ectitle.py` | The title screen's logo says ETERNAL KOMBAT: EC's own letters rearranged in the title picture's tiles (GAME.DAT) and four spare palette slots (GAME.CO); --preview, --measure (the plane's map, data/ec_title/). |
 | `ecunpack.py` | Run EC's own unpacker (SUB.BIN $11784) on a .PL resource, whole frame at once (d6 bit 6 = no yield). |
@@ -115,7 +115,8 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `backkickcheck.py` | MK fighters' back + B is the roundhouse and back + A the sweep (as MK CD's away + kick), both sides; C, down + C, A, B as before; Sub-Zero's slide; a CPU fight unchanged. |
 | `blockcheck.py` | Does Z block for an MK fighter? |
 | `closemovecheck.py` | Up close, MK fighters' X and Y are MK CD's close punch (Kano's headbutt) and A its knee, both sides: the close moves' frames shown and the victim hurt (Raiden's A stays his low kick: no room in his .PL). |
-| `mkstagecheck.py` | Each of MK's five other stages in our build as MK shows it: its MK music, the fighters' feet line, the camera's range, every band's scroll between the camera's stops, and the background at both stops against MK's (from its planes and bands). |
+| `mkstagecheck.py` | Each of MK's five other stages in our build as MK shows it: its MK music, the fighters' feet line, MK's animations (monks, torches, eyes) changing as MK's do, the camera's range, every band's scroll between the camera's stops, and the background at both stops against MK's (from its planes and bands). |
+| `mktextcheck.py` | MK's FIGHT! and FINISH HIM / FINISH HER on MK's stages: FIGHT!'s letters come up as the fight begins and go, the fight goes on; FINISH HER (Shadow) and FINISH HIM (Larcen) come up at the daze and go. |
 | `contestcheck.py` | One-player Contest (the ladder) with a fighter: does it run from match to match without freezing? |
 | `dazecheck.py` | An MK fighter's FINISH HIM daze: MK's 7-pose sway (mkinputs.DAZE_FRAMES at MK's timing, DAZE_SEQ: ~10 frames a pose, looped). |
 | `deadscriptcheck.py` | MK fighters in random fights: a fighter's running script is never one of Blade's that his block replaces (the build keeps code in their bodies). |
@@ -172,7 +173,8 @@ Captures and measurements on the user's MK disc that made `data/` (recipes, soun
 | `mkpitstate.py` | Make build/states/mk_pit_raw.state: Kano vs Kano at the start of a fight on MK's Pit, where the Pit tools start. |
 | `mkstagestates.py` | MK CD's 2-player battles in its stage order: a state at the start of each and the MK track it plays (build/states/mk_battle_<n>.state). |
 | `mkstagecamera.py` | MK CD's camera on each stage: its left and right stops, and each plane's scroll bands (lines, rate, scroll at the left stop), from the battle states. |
-| `mkstagemaps.py` | MK CD's stages as numbers: each plane's name table at a fight's start, BACKGDn's tile base in VRAM, the tiles MK animates, and its camera (data/mk_stages/). |
+| `mkstagemaps.py` | MK CD's stages as numbers: each plane's name table at a fight's start, BACKGDn's tile base in VRAM, what MK animates and its sequence (anim), and its camera (data/mk_stages/). |
+| `mktext.py` | MK CD's FIGHT! and FINISH HIM / FINISH HER as numbers: each letter's place, size and colour per frame (data/mk_text.json), matched against PAC.PRG's letters scaled. |
 | `mkreptileref.py` | MK CD's own Reptile fight, as the reference for ours. |
 | `mksch_probe.py` | Locate an MK fighter's untouched .SCH bytes in a live fight state. |
 | `mkselectstate.py` | Make build/states/mk_select.state from a cold boot of the user's MK CD (US): the character-select screen every MK capture starts from (tools/capture/mkduelstate.py). |

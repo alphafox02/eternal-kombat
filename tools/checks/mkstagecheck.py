@@ -4,6 +4,8 @@
 
 For each (tools/lib/mkstages.py), a duel on it (Scorpion vs Shadow, duelstate.py --mk-stage):
   - the stage's music is its MK track (EC's track number for it: $1A42(a6));
+  - what MK animates (the Courtyard's monks, the Gates' torches, the Lair's eyes) animates: each
+    element's tiles in VRAM change as often as MK's sequence (within 20%), showing only its states;
   - our fighters stand where MK's do (lowest fighter pixel, mkstages.MK_FEET, within 1);
   - both fighters walk to the camera's left stop, then its right: our camera's range is MK's
     (data/mk_stages/<stage>.json), and every band with art moves between the stops as MK's does
@@ -79,10 +81,10 @@ def ours(st):
     return compose(planes, prio, ha, hb, vsa, vsb), (ha, hb)
 
 
-def mk_expected(key, side):
+def mk_expected(key, side, planes=None):
     """MK's background at its camera's left or right stop, from its planes and measured bands."""
-    planes, _, prio = mkstages.art(key)
-    planes = {p: planes[p] for p in 'AB'}
+    base, _, prio = mkstages.art(key)
+    planes = {p: (planes or base)[p] for p in 'AB'}
     pp = {p: np.kron(prio[p], np.ones((8, 8), np.uint8)) for p in 'AB'}
     cam = mkstages._json(key)['camera']
     lo, hi = cam['camera']
@@ -108,6 +110,43 @@ def feet(v):
     return max(lows) if lows else None
 
 
+ANIM_WATCH = 1200                 # frames the animation is watched
+
+
+def animated(c, key):
+    """MK's animation in our VRAM: each element's tiles (mkstages.build_stage's, at the stage tiles'
+    VRAM, mkstages.STAGE_VRAM_TILE) show only the states built from MK's frames, and change as
+    often as MK's sequence says (within 20%) over ANIM_WATCH frames."""
+    import ecstage
+    anim = mkstages.animation(key, mkstages.bands(key)[0])
+    if not anim:
+        return []
+    _, bgi, _, rep = mkstages.build_stage(key, mkstages._host_file('SUB'))
+    bad = []
+    blocks = []
+    for e, el in enumerate(anim):
+        tiles = sorted({t for k, t in rep['own_tiles'].items() if k[0] == e})
+        lo = (mkstages.STAGE_VRAM_TILE + tiles[0]) * 32
+        blocks.append((lo, lo + 32 * len(tiles)))
+    seen = [[] for _ in anim]
+    for _ in range(ANIM_WATCH):
+        c.run(1)
+        v = VDPState(c.snapshot())
+        for e, (lo, hi) in enumerate(blocks):
+            b = v.vram[lo:hi]
+            if not seen[e] or seen[e][-1] != b:
+                seen[e].append(b)
+    for e, el in enumerate(anim):
+        n = len(seen[e]) - 1
+        frames = sum(f for _, f in el['runs'])
+        want = len(el['runs']) * ANIM_WATCH / frames
+        if not 0.8 * want <= n <= 1.2 * want + 1:
+            bad.append(f'animation {e}: {n} changes in {ANIM_WATCH} frames (MK\'s sequence: {want:.0f})')
+        if len(set(seen[e])) > el['nstates']:
+            bad.append(f'animation {e}: {len(set(seen[e]))} different pictures (MK has {el["nstates"]} states)')
+    return bad
+
+
 def stage(c, disc, tmp, key, shots=None):
     bad = []
     st = os.path.join(tmp, f'{key}.state')
@@ -128,6 +167,7 @@ def stage(c, disc, tmp, key, shots=None):
     f = sorted(set(f))
     if abs(f[-1] - mkstages.MK_FEET[key]) > 1:
         bad.append(f'feet at {f} (MK {mkstages.MK_FEET[key]})')
+    bad += animated(c, key)
     cam = mkstages._json(key)['camera']
     lo, hi = cam['camera']
     stops, diffs = {}, []
@@ -140,10 +180,13 @@ def stage(c, disc, tmp, key, shots=None):
         img, hs = ours(snap)
         stops[side] = (int.from_bytes(c.prg_ram()[0x2B070:0x2B072], 'big', signed=True), hs)
         exp = mk_expected(key, side)
-        # each line may sit 1 px off (EC's band scroll drops the fraction MK rounds: 0 to 1 px at the far stop)
+        # each line may sit 1 px off (EC's band scroll drops the fraction MK rounds: 0 to 1 px at the
+        # far stop); an animated element may be in any of its states
+        exps = [exp] + [mk_expected(key, side, pl) for states in mkstages.state_planes(key) for pl in states[1:]]
         d = np.ones(img.shape[:2], bool)
-        for dx in (-1, 0, 1):
-            d &= np.any(np.roll(img, dx, axis=1) != exp, axis=2)
+        for e_ in exps:
+            for dx in (-1, 0, 1):
+                d &= np.any(np.roll(img, dx, axis=1) != e_, axis=2)
         diffs.append(float(d.mean()))
         if shots:
             Image.fromarray(np.concatenate([exp, img, (d[:, :, None] * 255).repeat(3, 2).astype(np.uint8)], 1)).save(

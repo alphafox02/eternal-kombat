@@ -25,8 +25,9 @@ re-saves build/states/menu.state. In parallel where it can be (--jobs). Among th
   - MK fighters' back + B is the roundhouse and back + A the sweep; the CPU's play unchanged (tools/checks/backkickcheck.py)
   - MK fighters throw with B up close, as MK CD's high kick (tools/checks/kickthrowcheck.py)
   - up close, X and Y are MK CD's close punch and A its knee (tools/checks/closemovecheck.py)
-  - MK CD's other five stages as MK shows them: music, feet, camera, scroll bands, background
-    (tools/checks/mkstagecheck.py); which stage a fight is on, every case (tools/checks/stagepickcheck.py)
+  - MK CD's other five stages as MK shows them: music, feet, camera, scroll bands, background, MK's
+    animations (tools/checks/mkstagecheck.py); which stage a fight is on, every case
+    (tools/checks/stagepickcheck.py); MK's FIGHT! and FINISH HIM / HER there (tools/checks/mktextcheck.py)
   - Johnny Cage's split punch on down + B, his down + Z a Block (tools/checks/splitpunchcheck.py)
   - the specials that name a punch take either punch, as on MK CD (tools/checks/eitherpunchcheck.py)
   - the spear's sounds: the victim's scream at the hit, GET OVER HERE at the yank - Scorpion's and
@@ -161,6 +162,7 @@ def main():
             ("Reptile's fight starts on the Pit's bottom", PY + [T('pitstartcheck.py')]),
             ("MK's Courtyard, Palace Gates, Warrior Shrine, Throne Room and Lair as MK shows them", PY + [T('mkstagecheck.py')]),
             ('Which stage a fight is on (MK fighters on MK stages; the Duel setting; bosses)', PY + [T('stagepickcheck.py')]),
+            ("MK's FIGHT! and FINISH HIM / FINISH HER on MK's stages", PY + [T('mktextcheck.py')]),
             ('The title screen says ETERNAL KOMBAT', PY + [T('titlecheck.py')]),
             ("The title plays EC's song then MK's Mortal Monday music, never the cues", PY + [T('menumusiccheck.py')]),
             ('Shang Tsung', PY + [T('shangcheck.py')]),

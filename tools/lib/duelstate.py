@@ -55,11 +55,12 @@ def main():
         table = b''.join((pit if k == 'pit' else mkstages.MODE).to_bytes(2, 'big') for k in keys) + \
             bytes(mkstages.PACKED.index(k) if k in mkstages.PACKED else 0 for k in keys)
         at = c.prg_ram().find(table, 0x6000, 0x14000)
-        assert at > 0, "the MK stages' pick tables aren't in SUB.BIN (an older build?)"
+        assert at > 0 or not a.mk_stage, "the MK stages' pick tables aren't in SUB.BIN (an older build?)"
         k = a.mk_stage
         mode = a.stage if not k else pit if k == 'pit' else mkstages.MODE
-        c.poke_prg(at, mode.to_bytes(2, 'big') * len(keys)
-                   + bytes([mkstages.PACKED.index(k) if k in mkstages.PACKED else 0]) * len(keys))
+        if at > 0:                                     # (a disc without the pick: --stage alone does it)
+            c.poke_prg(at, mode.to_bytes(2, 'big') * len(keys)
+                       + bytes([mkstages.PACKED.index(k) if k in mkstages.PACKED else 0]) * len(keys))
     if a.unlock:
         mask = int.from_bytes(c.prg_ram()[0x31CC8:0x31CCC], 'big')
         for fid in a.unlock:

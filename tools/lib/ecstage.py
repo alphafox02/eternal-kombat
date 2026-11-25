@@ -290,6 +290,71 @@ def _cells_from_rgba(img, line_rgb):
     return lines, idx
 
 
+def raw_sheet(sid, slot, tiles, frames):
+    """Two chunk makers for ecstage.build's extra_chunks: a raw tile source (slot: its number) and a
+    sheet (sid) whose frames draw from it. tiles: 4-bit 8 x 8 arrays; frames: lists of pieces
+    (w, h tiles - each 1 to 4 -, first tile, x, y from the object: signed bytes), a piece's tiles
+    column by column as EC draws them."""
+    data = encode_tiles(tiles)
+
+    def tile_chunk(at):
+        return ((0x14 + len(data)).to_bytes(4, 'big') + bytes(6) + (slot * 8).to_bytes(2, 'big')
+                + (4).to_bytes(2, 'big') + (at + 0x14).to_bytes(4, 'big') + len(data).to_bytes(2, 'big') + data)
+    recs = []
+    most = 1
+    for pieces in frames:
+        r = bytearray((1).to_bytes(2, 'big') + bytes([0xF0, 0x10, 0xF0, 0x10]) + bytes(2))   # a box, no points
+        n = 0
+        for w, h, t, x, y in pieces:
+            r += (((w - 1) << 10) | ((h - 1) << 8) | 0x50).to_bytes(2, 'big') + t.to_bytes(2, 'big') \
+                + bytes([x & 0xFF, y & 0xFF])
+            n += w * h
+        r += (0x8000).to_bytes(2, 'big')
+        most = max(most, n)
+        recs.append(bytes(r))
+
+    def sheet_chunk(at):
+        table = bytearray((most * 32 - 1).to_bytes(2, 'big') + bytes(2) + len(recs).to_bytes(2, 'big'))
+        off = 2 * len(recs)
+        body = b''
+        for r in recs:
+            table += off.to_bytes(2, 'big')
+            off += len(r)
+            body += r
+        c = bytes(table) + body
+        if len(c) & 1:
+            c += b'\0'
+        return (0x10 + len(c)).to_bytes(4, 'big') + (4).to_bytes(2, 'big') + bytes(4) + (sid * 4).to_bytes(2, 'big') \
+            + (slot * 2).to_bytes(2, 'big') + bytes(2) + c
+    return {('tiles', slot): tile_chunk, ('sheet', sid): sheet_chunk}
+
+
+def quantize_cell(px, line):
+    """An 8 x 8 RGBA cell -> colour indices in one palette line (line: 16 RGB colours; 0 = clear)."""
+    p = np.array(line[1:], int)
+    rgb = px[:, :, :3].astype(int)
+    d = ((rgb[:, :, None, :] - p[None, None, :, :]) ** 2).sum(3)
+    t = (d.argmin(2) + 1).astype(np.uint8)
+    t[px[:, :, 3] == 0] = 0
+    return t
+
+
+def best_line(cells_px, line_rgb):
+    """The palette line (index) that draws all these RGBA cells (a cell's states) with the least error."""
+    best = None
+    for li, line in enumerate(line_rgb):
+        p = np.array(line[1:], int)
+        err = 0
+        for px in cells_px:
+            m = px[:, :, 3] > 0
+            if m.any():
+                c = px[:, :, :3][m].astype(int)
+                err += ((c[:, None, :] - p[None, :, :]) ** 2).sum(2).min(1).sum()
+        if best is None or err < best[0]:
+            best = (err, li)
+    return best[1]
+
+
 def choose_lines(images, cram):
     """Pick the two source palette lines (of cram's 4) that cover the most cells exactly.
     Returns ([line a, line b], cells covered exactly, cells)."""
@@ -415,13 +480,17 @@ def fit_palettes(images, cram, fixed, iters=8):
     return pal, dict(source_lines=chosen, exact_cells=f'{exact}/{n}', rms=float(np.sqrt(err / max(npx, 1))))
 
 
-def _dedupe_tiles(idx_cells, lines, tiles, lookup):
-    """Cell words for one image; tiles/lookup shared across layers (tile 0 = blank)."""
+def _dedupe_tiles(idx_cells, lines, tiles, lookup, own=None):
+    """Cell words for one image; tiles/lookup shared across layers (tile 0 = blank). own: {(cy, cx):
+    key} cells left as $FFFF for build's own_cells pass (animated: their pixels are rewritten)."""
     h, w = lines.shape
     out = np.zeros((h, w), np.uint16)
     for cy in range(h):
         for cx in range(w):
             t = idx_cells[cy, cx]
+            if own is not None and (cy, cx) in own:           # (an animated cell: its tile comes later,
+                out[cy, cx] = 0xFFFF                          #  grouped by element: build's own_cells)
+                continue
             if not t.any():
                 continue                                    # tile 0, line 0
             word = None
@@ -911,7 +980,8 @@ def _m68k_bgi(template_bgi, descriptors, palette_hw, settle=300, pit_fall=False)
 
 def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(0, 0), pit_fall=False,
           backdrop=0, layer_images=None, layer_prio=None, fixed_extra=None, fade=None,
-          blank_tile_slots=(), init=None, cell_prio=None):
+          blank_tile_slots=(), init=None, cell_prio=None, own_cells=None, fit_extra=(), cell_lines=None,
+          extra_chunks=(), replace_chunks=None):
     """Build NAME.BG and NAME.BGI for `stage` (whose init in SUB.BIN stays as is)
     from a front (plane A) and back (plane B) RGBA image in world pixels and a
     64-word cram (vdp.py packing). layer_images {layer id: RGBA in world
@@ -926,8 +996,14 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
     stage's own sprite art, unused: file size and VRAM). init: the init's
     description (parse_init's) to build for instead of the stage's own (an
     init generated elsewhere: mkstages.py). cell_prio {layer id: 2-D array of
-    0/1, one per cell of its art}: the priority bit cell by cell. Returns
-    (bg_bytes, bgi_bytes, report)."""
+    0/1, one per cell of its art}: the priority bit cell by cell. own_cells {layer id: {(cy, cx):
+    key}}: animated cells - the cells of one key share a tile, placed after all the others in key
+    order (report 'own_tiles': key -> tile); cell_lines {layer id: 2-D, -1 = free}: a
+    cell's palette line, forced; fit_extra: more images the palette is fitted to (the animation's
+    other states). extra_chunks: functions (file offset -> chunk bytes) for more chunks after the
+    template's sprite chunks (raw_sheet); replace_chunks {('tiles', slot) or ('sheet', sid): maker}:
+    the template's chunk of that number made anew. Returns (bg_bytes, bgi_bytes, report: also 'cells', each layer's cell words, and
+    'line_rgb', the two lines' colours)."""
     layer_images = {k: np.asarray(v, np.uint8) for k, v in (layer_images or {}).items()}
     if template is None:
         template = load_template(stage)
@@ -957,7 +1033,7 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
     fixed = {(0, 1): hw_to_rgb(tpal[1])}
     fixed.update({(1, i): hw_to_rgb(tpal[16 + i]) for i in range(10, 16)})
     fixed.update(fixed_extra or {})
-    line_rgb, pinfo = fit_palettes(list(imgs.values()) + list(layer_images.values()), cram, fixed)
+    line_rgb, pinfo = fit_palettes(list(imgs.values()) + list(layer_images.values()) + list(fit_extra), cram, fixed)
     pal_hw = [rgb_to_hw(c) for line in line_rgb for c in line]
     pal_hw[0] = packed_to_hw(cram[backdrop])
     pal_hw[16] = tpal[16]
@@ -965,6 +1041,7 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
     # one layer per id the init streams, cut from its plane image at the object's origin
     tiles, lookup = [np.zeros((8, 8), np.uint8)], {bytes(64): 0}
     layer_cells_by_id = {}
+    own_px = {}
     used = {'sky': {0}, 'kept': set()}             # colour 0 of line 0: the backdrop
     for lid in range(hdr['first_id'], hdr['first_id'] + len(hdr['layers'])):
         objs = [o for o in init['objects'] if o['id'] == lid]
@@ -984,6 +1061,12 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
         ww = max(32, (crop.shape[1] + 31) // 32 * 32)
         crop = _pad(crop, hh, ww)
         lines, idx = _cells_from_rgba(crop, line_rgb)
+        if cell_lines and lid in cell_lines:                # (forced lines: an animated cell's, from its
+            forced = np.asarray(cell_lines[lid])            #  states together)
+            for cy, cx in zip(*np.nonzero(forced[:lines.shape[0], :lines.shape[1]] >= 0)):
+                li = int(forced[cy, cx])
+                lines[cy, cx] = li
+                idx[cy, cx] = quantize_cell(crop[cy * 8:cy * 8 + 8, cx * 8:cx * 8 + 8], line_rgb[li])
         if fade:
             split = fade.get('rows', {}).get(lid, 0) // 8
             for cy in range(lines.shape[0]):
@@ -992,7 +1075,10 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
                     for c in np.unique(idx[cy, cx]):
                         if c:
                             used[key].add(int(lines[cy, cx]) * 16 + int(c))
-        layer_cells_by_id[lid] = _dedupe_tiles(idx, lines, tiles, lookup)
+        layer_cells_by_id[lid] = _dedupe_tiles(idx, lines, tiles, lookup,
+                                               own=own_cells.get(lid) if own_cells else None)
+        if own_cells and lid in own_cells:
+            own_px[lid] = (lines, idx)
         if lid in (cell_prio or {}):
             m = np.asarray(cell_prio[lid], bool)
             cells = layer_cells_by_id[lid]
@@ -1001,6 +1087,21 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
         if lid in (layer_prio or {}):
             x0, y0, x1, y1 = layer_prio[lid]
             layer_cells_by_id[lid][y0 // 8:(y1 + 7) // 8, x0 // 8:(x1 + 7) // 8] |= 0x8000
+    # the animated cells' tiles, after every other: cells with one key share one, keys in order
+    # (an element's tiles together: one upload per state)
+    own_tiles = {}
+    for key in sorted({k for d in (own_cells or {}).values() for k in d.values()}):
+        for lid, d in own_cells.items():
+            lines, idx = own_px[lid]
+            for (cy, cx), k in d.items():
+                if k != key:
+                    continue
+                if key not in own_tiles:
+                    own_tiles[key] = len(tiles)
+                    tiles.append(idx[cy, cx].copy())
+                pm = np.asarray(cell_prio[lid]) if cell_prio and lid in cell_prio else None
+                hi = 0x8000 if pm is not None and cy < pm.shape[0] and cx < pm.shape[1] and pm[cy, cx] else 0
+                layer_cells_by_id[lid][cy, cx] = own_tiles[key] | (int(lines[cy, cx]) << 13) | hi
     if len(tiles) > 2047:
         raise ValueError(f'{len(tiles)} tiles (max 2047 in one tile chunk)')
     tile_bytes = encode_tiles(tiles)
@@ -1010,12 +1111,18 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
     for o, n, t in P['chunks']:
         if t == 8 or (t == 0 and W(tbg, o + 0xA) // 8 == hdr['tile_slot']):
             continue
+        rk = ('tiles', W(tbg, o + 0xA) // 8) if t == 0 else ('sheet', W(tbg, o + 0xA) // 4) if t == 4 else None
+        if rk in (replace_chunks or {}):                    # (the template's sprite chunk, ours instead)
+            out += replace_chunks[rk](len(out))
+            continue
         if t == 0 and W(tbg, o + 0xA) // 8 in blank_tile_slots:
             c0 = len(out)
             out += (0x14 + 32).to_bytes(4, 'big') + tbg[o + 4:o + 0xE]
             out += (c0 + 0x14).to_bytes(4, 'big') + (32).to_bytes(2, 'big') + bytes(32)
             continue
         out += tbg[o:o + n]
+    for make in extra_chunks:                               # (more sprite chunks: at their file offset)
+        out += make(len(out))
     c8 = len(out)
     nl = len(hdr['layers'])
     head = 0x1E + 2 * nl + 2 + 8 * nl
@@ -1054,6 +1161,7 @@ def build(plane_a_rgba, plane_b_rgba, cram, stage='SHA', template=None, offset=(
         pit_fall = dict(pit_fall, fade_mask=sum(1 << (31 - c) for c in sky))
     bgi = _m68k_bgi(tbgi, descs, pal_hw, pit_fall=pit_fall)
     report = dict(mode=mode, tiles=len(tiles), tile_bytes=len(tile_bytes), bg_bytes=len(out),
+                  cells=layer_cells_by_id, line_rgb=line_rgb, own_tiles=own_tiles,
                   map_end=BG_BASE + t0, blocks=nblocks, palette=pinfo, pal_hw=[f'{w:03x}' for w in pal_hw],
                   bgi_bytes=len(bgi), objects=init['objects'], camera=init.get('camera'))
     if BG_BASE + t0 > 0x40800:
