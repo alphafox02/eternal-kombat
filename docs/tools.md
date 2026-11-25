@@ -149,7 +149,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `soakcheck.py` | A long fight that must never freeze: Kano jumps in at the CPU's Reptile on the Pit, both healths kept full. |
 | `sonyainputcheck.py` | Sonya's specials from the pad, both sides: forward held + HP punches (not the square wave), forward, back + HP flies, HP, back, a punch throws the rings (MK CD's; back + HP alone doesn't), close forward + HP throws; the CPU's Sonya never runs the recogniser. |
 | `soundbankcheck.py` | Do the fight's sound banks load whole? |
-| `spearcheck.py` | The spear from near to its full reach: Scorpion's and Reptile's pull the victim in and daze him inside EC's hit stun; Scorpion's rope holds 20+ frames. |
+| `spearcheck.py` | The spear from near to its full reach: Scorpion's and Reptile's hit in MK's time, pin the victim (MK ~34 frames), pull him in and daze him; a crouch is missed, a cornered fighter hit. |
 | `spearsoundcheck.py` | Does the spear sound as MK's? |
 | `splitpunchcheck.py` | Johnny Cage's split punch is down + B (MK CD's down + high kick) and his down + Z blocks, on both sides; the rest of his crouch and the others' down + B as before; the CPU's Johnny never runs the code. |
 | `squarewavecheck.py` | Sonya's square wave at MK's height: over a standing opponent, into a jumping one. |
@@ -213,6 +213,7 @@ For developers: disassembly, sprite and frame inspection, videos, audits, and `v
 | `stageaudit.py` | Every stage's round end, Overkill and Sudden Death with each MK fighter as the loser against Shadow: pictures only the MK loser's run draws, a different finisher, a frozen picture. |
 | `stagevideo.py` | Record a stage's Overkill or Sudden Death on an MK loser (the spot found by walking him along the stage), with sound. |
 | `throwcmp.py` | MK's throws beside ours: recorded with sound, each fighter's sprite box per frame, the victim's path, comparison sheets. |
+| `spearcmp.py` | MK's spear beside ours from the same distances (Scorpion on Sub-Zero, the Courtyard): recorded with sound, frame sheets and a side-by-side video. |
 | `trailer.py` | A one-minute trailer of the built disc cut to MK CD's Mortal Monday music: title, select screen, specials, fatalities, stage finishers, the Pit. |
 | `verify_fresh.py` | Does a fresh clone build exactly this disc? |
 | `victimtables.py` | Find EC's per-victim pose tables: tables with an entry per victim id 2-24 holding frame words in THAT victim's sheets. |
