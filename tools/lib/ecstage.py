@@ -631,7 +631,7 @@ def pit_fall_code(cut=None):
     ] + (['6100', ('br16', 'rbot')] if cut else []) + [
         '47f90002e188', '7e00', '6100', ('br16', 'one'),   # P1
         '47f90002e330', '7e01', '6100', ('br16', 'one'),   # P2
-    ] + (['6100', ('br16', 'pf_tick')] if cut else []) + [
+    ] + (['6100', ('br16', 'pf_tick'), '6100', ('br16', 'fv_tick')] if cut else []) + [
         '7001', '4eb9000068d6',                         # sleep 1
         '6000', ('br16', 'watch'),
         ('label', 'one'),                               # a3 = fighter, d7 = 0/1, a2 = fvars
@@ -916,8 +916,43 @@ def pit_fall_code(cut=None):
         '4e75',
         ('label', 'fvars'), '00' * 30,
         ('label', 'ptmp'), '00' * 64,
-    ]
+    ] + pit_fight_voice()
     return items
+
+
+def pit_fight_voice():
+    """MK's announcer: FIGHT! on the Pit too (as mkstages' text director on MK's other stages - the Pit
+    has no room for the letters): each tick, while the fight flag (bit 6 of $28001, set as BEGIN CONTEST
+    ends) is on, a count goes up - at 1 the FIGHT! bank (mkstages.fight_voice_bank, here) goes to EC's
+    driver (after the fighters' banks, free pages), at 4 (between rounds the flag blinks 3 ticks) the
+    voice plays; the count stops at 16 and is cleared while the flag is off."""
+    import mkstages
+    bank, _, _ = mkstages.fight_voice_bank(0)
+    table, pcm = bank[:0x2E], bank[0x2E:]
+    return [
+        ('label', 'fv_tick'),
+        '41fa', ('pc16', 'fv_v'),                       # lea fv_v(pc),a0
+        '0839000600028001',                             # btst #6,$28001.l   the fight is on?
+        '6600', ('br16', 'fv_on'),
+        '4210', '4e75',                                 # clr.b (a0) ; rts
+        ('label', 'fv_on'),
+        '0c100010', '6400', ('br16', 'fv_x'),           # cmpi.b #16,(a0) ; bhs   (counted enough)
+        '5210',                                         # addq.b #1,(a0)
+        '0c100001', '6600', ('br16', 'fv_n1'),
+        '48e7fffe',                                     # movem.l d0-d7/a0-a6,-(sp)
+        '41fa', ('pc16', 'fv_tab'), '43fa', ('pc16', 'fv_pcm'),   # lea table(pc),a0 ; lea samples(pc),a1
+        f'4eb9{mkstages.SND_LOAD:08x}',                 # jsr driver's load
+        '4cdf7fff', '4e75',
+        ('label', 'fv_n1'),
+        '0c100004', '6600', ('br16', 'fv_x'),
+        '48e7fffe', f'303c{mkstages.FIGHT_VOICE_ID:04x}', '4eb900006d58', '4cdf7fff',
+        ('label', 'fv_x'),
+        '4e75',
+        ('label', 'fv_v'), '0000',
+        table[:0xC].hex(), ('label', 'fv_tab'), table[0xC:0xE].hex(), ('abs32', 'fv_ent'), table[0x12:0x14].hex(),
+        ('label', 'fv_ent'), table[0x14:].hex(),
+        pcm[:0xC].hex(), ('label', 'fv_pcm'), pcm[0xC:].hex(),
+    ]
 
 
 PIT_FALL = pit_fall_code()

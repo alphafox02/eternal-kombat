@@ -69,7 +69,7 @@ What you run: find your discs, make `extracted/` from them, build the disc, play
 | `ecpl2.py` | EC .PL art banks: an optimal (dynamic-programming) parse over every opcode family of EC's unpacker (SUB.BIN $11784), with the dictionary chosen by measured use. |
 | `ecprobe.py` | Record which sheet frames an EC fighter uses for each action, by playing the actions in a 2-player duel. |
 | `ecstage.py` | Eternal Champions CD stages: read, render and build NAME.BG / NAME.BGI. |
-| `mkstages.py` | MK CD's five other stages as EC stages in one stage mode (packed files, a dispatcher, each init's rest generated from MK's measured scroll bands), their tasks (MK's animations; MK's FIGHT! and FINISH HIM / HER as stage sprites), and the pick: an MK fighter's fight is on one of MK's six at random. |
+| `mkstages.py` | MK CD's five other stages as EC stages in one stage mode (packed files, a dispatcher, each init's rest generated from MK's measured scroll bands), their tasks (MK's animations; MK's FIGHT! and FINISH HIM / HER as stage sprites; MK's FIGHT! voice), and the pick: an MK fighter's fight is on one of MK's six at random. |
 | `stageinit.py` | A stage's init (SUB.BIN) moved after its file loads into its .BGI: bsr/bra out become jsr/jmp, branches re-aimed, its palette table with it. |
 | `ectitle.py` | The title screen's logo says ETERNAL KOMBAT: EC's own letters rearranged in the title picture's tiles (GAME.DAT) and four spare palette slots (GAME.CO); --preview, --measure (the plane's map, data/ec_title/). |
 | `ecunpack.py` | Run EC's own unpacker (SUB.BIN $11784) on a .PL resource, whole frame at once (d6 bit 6 = no yield). |
@@ -117,6 +117,7 @@ Run after a build. `allchecks.py` runs them all (and a few library tools with `-
 | `blockcheck.py` | Does Z block for an MK fighter? |
 | `closemovecheck.py` | Up close, MK fighters' X and Y are MK CD's close punch (Kano's headbutt) and A its knee, both sides: the close moves' frames shown and the victim hurt (Raiden's A stays his low kick: no room in his .PL). |
 | `mkstagecheck.py` | Each of MK's five other stages in our build as MK shows it: its MK music, the fighters' feet line, MK's animations (monks, torches, eyes) changing as MK's do, the camera's range, every band's scroll between the camera's stops, and the background at both stops against MK's (from its planes and bands). |
+| `fightvoicecheck.py` | MK's announcer says FIGHT! on MK's six stages: the voice in sound RAM after the fighters' banks, every clip of theirs and FIGHT.SND's still whole; heard at round 2's FIGHT! (the Courtyard, the Pit). |
 | `mktextcheck.py` | MK's FIGHT! and FINISH HIM / FINISH HER on MK's stages: FIGHT!'s letters come up as the fight begins and go, the fight goes on; FINISH HER (Shadow) and FINISH HIM (Larcen) come up at the daze and go. |
 | `contestcheck.py` | One-player Contest (the ladder) with a fighter: does it run from match to match without freezing? |
 | `dazecheck.py` | An MK fighter's FINISH HIM daze: MK's 7-pose sway (mkinputs.DAZE_FRAMES at MK's timing, DAZE_SEQ: ~10 frames a pose, looped). |

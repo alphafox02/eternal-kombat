@@ -389,20 +389,50 @@ def build_stage(key, template_sub):
         d = bytearray(template_desc)
         d[0x1E:0x22] = code_at.to_bytes(4, 'big')
         return bytes(d)
-    addrs = []
-    for t in tasks:
-        at = (len(bgi) + 1) & ~1
-        bgi = bgi + bytes(at - len(bgi))
-        desc_at = ecstage.BGI_BASE + at
-        if t == 'anim':
-            code = anim_code(desc_at + 0x22, anim, rep, info)
-            bgi += desc(desc_at + 0x22) + code
-        else:
-            code, _ = text_code(desc_at + 0x22, 0, where)             # (its size: the letters' descriptor after)
-            letter_at = desc_at + 0x22 + len(code)
-            code, letter_code = text_code(desc_at + 0x22, letter_at, where)
-            bgi += desc(desc_at + 0x22) + code + desc(letter_code)
-        addrs.append(desc_at)
+    base_bgi = bgi
+
+    def tasks_in(far):
+        # the tasks after the setup: MK's animation, MK's text (and after it MK's FIGHT! voice: a sound bank
+        # the director hands the driver); far: the animation's data in the BG's tail
+        bgi, addrs = base_bgi, []
+        for t in tasks:
+            at = (len(bgi) + 1) & ~1
+            bgi = bgi + bytes(at - len(bgi))
+            desc_at = ecstage.BGI_BASE + at
+            if t == 'anim':
+                code = anim_code(desc_at + 0x22, anim, rep, info, far)
+                bgi += desc(desc_at + 0x22) + code
+            else:
+                voice = (0, 0)
+                code, _ = text_code(desc_at + 0x22, 0, where, voice)        # (its size: the letters' descriptor,
+                letter_at = desc_at + 0x22 + len(code)                      #  the bank after)
+                bank_at = (letter_at + 0x22 + 1) & ~1
+                bank, *voice = fight_voice_bank(bank_at)
+                code, letter_code = text_code(desc_at + 0x22, letter_at, where, tuple(voice))
+                bgi += desc(desc_at + 0x22) + code + desc(letter_code)
+                bgi += bytes(bank_at - ecstage.BGI_BASE - len(bgi)) + bank
+            addrs.append(desc_at)
+        return bgi, addrs
+    bgi, addrs = tasks_in(None)
+    limit = ecstage.BG_BASE - ecstage.BGI_BASE
+    if len(bgi) > limit and anim:
+        # no room: some of the animation's data goes in the BG, in a chunk EC's loader passes over (type
+        # $10: SUB $66F8, an rts) before the map - not after it: the AI loads over the BG from $40800
+        probe = dict(base=0, room=BG_MAX - len(bg) - 12)         # (as much as the BG has room for)
+        tasks_in(probe)
+        data = bytes(probe['data'])
+        where_ = {}
+
+        def data_chunk(at):
+            where_['at'] = ecstage.BG_BASE + at + 10
+            return (10 + len(data)).to_bytes(4, 'big') + (0x10).to_bytes(2, 'big') + bytes(4) + data
+        kw['extra_chunks'] = tuple(kw.get('extra_chunks', ())) + (data_chunk,)
+        bg, _bgi0, rep2 = ecstage.build(planes['A'], planes['B'], cram, **kw)
+        assert rep2['line_rgb'] == line_rgb and _bgi0 == base_bgi[:len(_bgi0)], 'the stage moved'
+        far = dict(base=where_['at'], room=len(data))
+        bgi, addrs = tasks_in(far)
+        assert bytes(far['data']) == data
+        print(f'        ({key}: {len(data)} bytes of its animation in its BG)')
     body2 = body_code(org, spawn(addrs), floor, start, pal_hw, template_sub)
     assert len(body2) == len(body)
     bgi = bgi[:org - ecstage.BGI_BASE] + body2 + bgi[org - ecstage.BGI_BASE + len(body2):]
@@ -417,13 +447,16 @@ STAGE_VRAM_TILE = 708             # VRAM tile of the stages' tile slot (9, Chin 
 ANIM_REC = 18                     # an element's record: timer, run, runs, runs table, states, VRAM address, bytes
 
 
-def anim_code(org, anim, rep, info):
+def anim_code(org, anim, rep, info, far=None):
     """The animation task at org: every tick (a sleep: 2 frames) each element's timer counts down 2; at 0
     or below its next run
     (MK's sequence, looped) begins and that run's state's tiles are queued for VRAM ($CE1A: source,
     VRAM address, bytes). An element's tiles are consecutive (build's own_cells), each state's
-    pixels one block. Starts each element on its last run so that the first frame puts run 0's
-    state in (a round restarting finds the tiles as the last round left them)."""
+    pixels one block (each state's found through a table of pointers). Starts each element on its last
+    run so that the first frame puts run 0's state in (a round restarting finds the tiles as the last
+    round left them). Runs are bytes: state, frames. far: {'base': address, 'room': bytes} - runs and
+    state blocks go there while they fit (the BG's tail: the BGI's room is taken), far['data'] their
+    bytes."""
     import mkinputs, ecstage
     line_rgb = rep['line_rgb']
     elems = []
@@ -441,7 +474,12 @@ def anim_code(org, anim, rep, info):
                 px = ecstage.quantize_cell(cs[s_], line_rgb[(word >> 13) & 3])
                 data[32 * t:32 * t + 32] = ecstage.encode_tiles([px])
             blocks.append(bytes(data))
-        elems.append(dict(dest=(STAGE_VRAM_TILE + tiles[0]) * 32, size=32 * len(tiles), blocks=blocks, runs=el['runs']))
+        # only the tiles some state changes (the rest are the same in every state: the BG's own, in VRAM)
+        moving = [t for t in range(len(tiles)) if len({b[32 * t:32 * t + 32] for b in blocks}) > 1]
+        lo, hi = (moving[0], moving[-1] + 1) if moving else (0, 1)
+        blocks = [b[32 * lo:32 * hi] for b in blocks]
+        elems.append(dict(dest=(STAGE_VRAM_TILE + tiles[0] + lo) * 32, size=32 * (hi - lo), blocks=blocks,
+                          runs=el['runs']))
     a = mkinputs.Asm(org)
     a.w(0x08ED, 0x0006, 0x002A)                           # bset #6,$2A(a5)       its sprite hidden
     a.w(0x3B7C, 0x7000, 0x004E, 0x3B7C, 0x7000, 0x0052)   # x, y = $7000
@@ -466,14 +504,16 @@ def anim_code(org, anim, rep, info):
     a.w(0x7000)                                           # moveq #0,d0
     a.label('nowrap')
     a.w(0x3540, 2)                                        # move.w d0,2(a2)
-    a.w(0xE548)                                           # lsl.w #2,d0
+    a.w(0xD040)                                           # add.w d0,d0           (a run: 2 bytes)
     a.w(0x226A, 6)                                        # movea.l 6(a2),a1      runs table
-    a.w(0x3231, 0x0002)                                   # move.w 2(a1,d0.w),d1    its frames,
+    a.w(0x7200)                                           # moveq #0,d1
+    a.w(0x1231, 0x0001)                                   # move.b 1(a1,d0.w),d1    its frames,
     a.w(0xD352)                                           # add.w d1,(a2)           after what's left
-    a.w(0x3231, 0x0000)                                   # move.w 0(a1,d0.w),d1    its state
-    a.w(0xC2EA, 16)                                       # mulu.w 16(a2),d1      x bytes
-    a.w(0x202A, 10)                                       # move.l 10(a2),d0      states
-    a.w(0xD081)                                           # add.l d1,d0           its pixels
+    a.w(0x7200)                                           # moveq #0,d1
+    a.w(0x1231, 0x0000)                                   # move.b 0(a1,d0.w),d1    its state
+    a.w(0xE549)                                           # lsl.w #2,d1
+    a.w(0x206A, 10)                                       # movea.l 10(a2),a0     states' pointers
+    a.w(0x2030, 0x1000)                                   # move.l 0(a0,d1.w),d0  its pixels
     a.w(0x322A, 14)                                       # move.w 14(a2),d1      VRAM
     a.w(0x342A, 16)                                       # move.w 16(a2),d2      bytes
     a.jsr(0xCE1A)
@@ -490,13 +530,25 @@ def anim_code(org, anim, rep, info):
         fix.append((len(a.out), 'states')); a.l(0)
         a.w(el['dest'], el['size'])
     code = bytearray(a.build())
+    if far is not None:
+        far['data'] = bytearray()
+
+    def put(data):                                        # -> its address: far while it fits, else here
+        if far is not None and len(far['data']) + len(data) <= far['room']:
+            at = far['base'] + len(far['data'])
+            far['data'] += data
+            return at
+        at = org + len(code)
+        code.extend(data)
+        return at
     for k, el in enumerate(elems):
+        assert all(st < 256 and 0 < n < 256 for st, n in el['runs']), 'a run past a byte'
+        runs_at = put(b''.join(bytes((st, n)) for st, n in el['runs']))
+        ptrs = [put(b) for b in el['blocks']]
         if len(code) & 1:
             code += b'\0'
-        runs_at = org + len(code)
-        code += b''.join(st.to_bytes(2, 'big') + n.to_bytes(2, 'big') for st, n in el['runs'])
         states_at = org + len(code)
-        code += b''.join(el['blocks'])
+        code += b''.join(p_.to_bytes(4, 'big') for p_ in ptrs)
         o = fix[2 * k][0]
         code[o:o + 4] = runs_at.to_bytes(4, 'big')
         o = fix[2 * k + 1][0]
@@ -727,6 +779,36 @@ TEXT_EVENTS = ('fight', 'finish_him', 'finish_her')
 TEXT_RED = (0, 15)                # a stage whose colours have no red near MK's text gets it here (the Lair)
 TEXT_RED_NEAR = 60                # (distance of the nearest)
 TEXT_STEP = 8                     # a letter's sizes: MK's, to the nearest 8 px (MK shows ~5 per letter as it grows; room)
+FIGHT_VOICE_ID = 0x3F6            # a new PCM sound id (no .SND has it)
+FIGHT_VOICE_TABLE, FIGHT_VOICE_SLOT = 0x188, 0x18C   # its chunks' slot words (EC's loader's numbers - unused:
+                                  #  EC's .SNDs go to $184 - though the bank is never registered: the stage's
+                                  #  director hands the driver its addresses)
+SND_LOAD = 0x47776                # the sound driver: a0 table, a1 samples - into sound RAM from where the last
+                                  #  committed load ($47696: the fight's, its banks) ended
+
+
+def fight_voice_bank(at):
+    """MK's FIGHT! as a sound bank at address at, in the form EC's loader leaves a .SND's chunks in
+    (SUB $6630 / $6674): a sound table chunk ($1C: one entry, FIGHT_VOICE_ID at MK's own rate, its
+    entry pointer made absolute) and a PCM chunk ($20) with FIGHT.SVX. -> (bytes, table, samples):
+    the driver's a0 / a1 (each chunk's +$C)."""
+    import patches
+    rate, body = patches.mk_sample('FIGHT.SVX')
+    pcm = patches.to_rf5c164(body, rate, rate, len(body))
+    clip = pcm + b'\x80' * ((len(pcm) + 1) & 1) + b'\xff'
+    entry = (FIGHT_VOICE_ID.to_bytes(2, 'big') + bytes(2) + b'\xff\xff\x3f\x00\xff\x7f'
+             + rate.to_bytes(2, 'big') + bytes(12) + (0).to_bytes(2, 'big'))
+    assert len(entry) == 0x1A
+    body_ = (0x1C).to_bytes(2, 'big') + bytes(4) + FIGHT_VOICE_TABLE.to_bytes(2, 'big') + (1).to_bytes(2, 'big') \
+        + (at + 0x14).to_bytes(4, 'big') + bytes(2) + entry
+    table = (4 + len(body_)).to_bytes(4, 'big') + body_
+    assert len(table) == 0x14 + 0x1A
+    pcm_at = at + len(table)
+    chunk = (16 + len(clip)).to_bytes(4, 'big') + (0x20).to_bytes(2, 'big') + bytes(4) \
+        + FIGHT_VOICE_SLOT.to_bytes(2, 'big') + len(clip).to_bytes(4, 'big') + clip
+    return table + chunk, at + 0xC, pcm_at + 0xC
+
+
 BG_MAX = 0x43000 - 0x37000        # a stage's .BG may reach $43000: the CD loader's stack is there as it loads
                                   # (patches.cd_ai_stack)
 TEXT_SLOTS = 9                    # letter objects (FINISH HIM / HER: 9 letters; FIGHT!: 6)
@@ -822,7 +904,7 @@ def text_chunks(line_rgb, where):
     return makers
 
 
-def text_code(org, letter_desc, where):
+def text_code(org, letter_desc, where, voice=None):
     """The text director at org (an object's code). A task's registers don't last a sleep (EC's
     tasks keep their state in memory; a4 is the task's own block): each tick (a sleep, 2 frames) it
     starts afresh from its variables. Idle: on the fight's start (FIGHT_FLAG's bit 6 set FIGHT_ON
@@ -843,11 +925,21 @@ def text_code(org, letter_desc, where):
     a.w(0x08ED, 0x0006, 0x002A)                           # bset #6,$2A(a5)       itself hidden
     a.w(0x3B7C, 0x7000, 0x004E, 0x3B7C, 0x7000, 0x0052)
     # its variables (in the stage's code: they outlast a round, the director doesn't)
-    for name in ('fdone', 'kdone', 'on', 'armed'):
+    for name in ('fdone', 'kdone', 'on', 'armed', 'sndok'):
         a.w(0x4239); var(name)                            # clr.b var
     a.w(0x4279); var('left')                              # clr.w left            (not playing)
     a.label('wait')
     a.w(0x7001); a.jsr(0x68D6)                            # sleep
+    if voice:                                             # the FIGHT! voice's bank into sound RAM, after
+        a.pcrel(0x103A, 'sndok')                          #  the fighters' (the driver goes on from where
+        a.bccw(0x66, 'sndin')                             #  the fight's loads left it: free pages)
+        a.w(0x13FC, 1); var('sndok')                      # move.b #1,sndok
+        a.w(0x48E7, 0xFFFE)                               # movem.l d0-d7/a0-a6,-(sp)
+        a.w(0x41F9); a.l(voice[0])                        # lea table,a0
+        a.w(0x43F9); a.l(voice[1])                        # lea samples,a1
+        a.jsr(SND_LOAD)
+        a.w(0x4CDF, 0x7FFF)                               # movem.l (sp)+,d0-d7/a0-a6
+        a.label('sndin')
     a.w(0x4A79); var('left')                              # tst.w left
     a.bccw(0x66, 'tick')                                  # bne.w tick            playing
     a.pcrel(0x103A, 'fdone')                              # move.b fdone(pc),d0
@@ -865,6 +957,11 @@ def text_code(org, letter_desc, where):
     a.w(0x0C39, FIGHT_ON); var('on')                      # cmpi.b #n,on
     a.bccw(0x66, 'nofight')
     a.w(0x13FC, 1); var('fdone')                          # move.b #1,fdone
+    if voice:                                             # MK's announcer: FIGHT! (the stage's bank)
+        a.w(0x48E7, 0xFFFE)                               # movem.l d0-d7/a0-a6,-(sp)
+        a.w(0x303C, FIGHT_VOICE_ID)                       # move.w #id,d0
+        a.jsr(0x6D58)
+        a.w(0x4CDF, 0x7FFF)                               # movem.l (sp)+,d0-d7/a0-a6
     a.w(0x207C); a.l(where['fight'])                      # movea.l #fight,a0
     a.bccw(0x60, 'start')
     a.label('nofight')
@@ -947,7 +1044,7 @@ def text_code(org, letter_desc, where):
     a.w(0x42A9, 0xFFFC)                                   # clr.l -4(a1)
     a.dbra(7, 'gone')
     a.bccw(0x60, 'wait')
-    for name, size in (('on', 1), ('armed', 1), ('fdone', 1), ('kdone', 1)):
+    for name, size in (('on', 1), ('armed', 1), ('fdone', 1), ('kdone', 1), ('sndok', 1)):
         a.label(name); a.out += bytes(size)
     if len(a.out) & 1:
         a.out += b'\0'
