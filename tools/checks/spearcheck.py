@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""The spear, from near to its full reach, pulls the victim in and dazes him.
+"""The spear, from near to across the screen (MK's: mkspear.py), pulls the victim in and dazes him.
 
-(mkinputs.SPEAR_TICKS, PULL_SPEED, r_drag.) Scorpion (player 1) and Reptile (player 2) against Shadow,
-from 70, 110 and 140 px. Each throw must hit, pull the victim in (within PULL_GAP + 8 px) and daze
-him, the daze starting within 46 frames of the hit: EC's hit reaction lets him go ~48 frames after
-it, and a yank still going then lets him walk free (the hold's limit: mk_fidelity_spec 6). Also the
-hold: Scorpion on his rope frames (42:30/31) at least 20 frames (Reptile's are his own sheet's).
+(mkinputs.emit_spear_rope, SPEAR_TICKS, PULL_SPEED, r_drag.) Scorpion (player 1) and Reptile (player 2)
+against Shadow, from 70 to 215 px. Each throw must hit (the victim reels, or is in EC's projectile hit
+state - the rope's hit), pull the victim in (within PULL_GAP + 8 px) and daze him, the daze starting
+within 46 frames of the hit: EC's hit reaction lets him go ~48 frames after it, and a yank still going
+then lets him walk free (the hold's limit: mk_fidelity_spec 6). Also the hold: Scorpion on his rope
+frames (42:30/31) at least 20 frames from up close (Reptile's are his own sheet's); from further the
+rope cuts it short, the yank being longer (at least HOLD_FAR). And the rope flies over a crouching
+fighter (MK's), from either side.
 
     spearcheck.py [--disc CUE]     (run after play.py test has made the disc's build/states/menu.state)
 """
@@ -18,12 +21,14 @@ from inputs import ROOT
 
 P1, P2 = 0x2E188, 0x2E330
 W = lambda r, o: int.from_bytes(r[o:o + 2], 'big', signed=True)
-GAPS = (70, 110, 140)
+GAPS = (70, 110, 140, 180, 215)
+NEAR = 70                  # (up to here MK's long hold: 20 frames at least)
+HOLD_FAR = 8
 LIMIT = 46
 HOLD = {mkinputs.fr(0x4230), mkinputs.fr(0x4231)}
 
 
-def throw(disc, st, thrower, gap):
+def throw(disc, st, thrower, gap, victim_holds=()):
     """One spear from gap px: (hit, daze start, frames on the rope's hold, the gap after) - frames from the press."""
     victim = P1 if thrower == P2 else P2
     port, back = (0, 'left') if thrower == P1 else (1, 'right')
@@ -35,7 +40,9 @@ def throw(disc, st, thrower, gap):
     d = W(r, thrower + 0xB2) + (gap if thrower == P1 else -gap) - W(r, victim + 0xB2)
     for o in (0xB2, 0x4E):
         c.poke_prg(victim + o, ((W(r, victim + o) + d) & 0xFFFF).to_bytes(2, 'big'))
+    c.buttons[1 - port] = set(victim_holds)
     c.run(20)
+    hp = W(c.prg_ram(), victim + 0x76)
     hit = daze = None
     hold, t = 0, 0
     for b, n in [({back}, 3), (set(), 2), ({back}, 3), ({'x'}, 4), (set(), 200)]:
@@ -45,13 +52,15 @@ def throw(disc, st, thrower, gap):
             t += 1
             r = c.prg_ram()
             s = W(r, victim + 0xBE) & 0x7FFF
-            if hit is None and mkinputs.HIT_FIRST <= s <= mkinputs.HIT_LAST:
+            if hit is None and (mkinputs.HIT_FIRST <= s <= mkinputs.HIT_LAST or s == mkinputs.ROPE_STATE):
                 hit = t
             if hit is not None and daze is None and s == mkinputs.DIZZY:
                 daze = t
             hold += (W(r, thrower + 0xBE) & 0x7FFF) == mkinputs.SPEAR_MOVE and (W(r, thrower + 0x1A) & 0xFFFF) in HOLD
             if daze is not None and t > daze + 20:
                 return hit, daze, hold, abs(W(r, thrower + 0xB2) - W(r, victim + 0xB2))
+    if victim_holds:
+        return hp - W(c.prg_ram(), victim + 0x76)
     return hit, daze, hold, abs(W(c.prg_ram(), thrower + 0xB2) - W(c.prg_ram(), victim + 0xB2))
 
 
@@ -78,8 +87,12 @@ def main():
                     bad.append(f'{name} from {gap} px: not dazed within {LIMIT} frames of the hit (he walks free)')
                 elif after > mkinputs.PULL_GAP + 8:
                     bad.append(f'{name} from {gap} px: left {after} px away')
-                if name == 'Scorpion' and hold < 20:
-                    bad.append(f'{name} from {gap} px: the rope held {hold} frames (MK ~35, ours 22)')
+                if name == 'Scorpion' and hold < (20 if gap <= NEAR else HOLD_FAR):
+                    bad.append(f'{name} from {gap} px: the rope held {hold} frames (MK ~35, ours 22 up close)')
+            lost = throw(a.disc, st, thrower, 140, {'down'})          # MK's spear goes over a crouch
+            print(f'{name} at a crouching Shadow from 140 px: she loses {lost} health')
+            if lost:
+                bad.append(f'{name}: the spear hit a crouching fighter')
     for b in bad:
         print('FAIL:', b)
     print('spearcheck:', 'FAIL' if bad else 'ok')

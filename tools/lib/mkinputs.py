@@ -110,6 +110,8 @@ LAUNCH_DX = 3                 # px per call backwards (~100 px over the flight; 
 LAUNCH_AT = 0x19870           # fighter hit path after the reaction: move.w $1444(a6),d1 ; move.w $1446(a6),d2
 LAUNCH_ORIG = bytes.fromhex('322e1444342e1446')
 DAZE_CALLS = 40               # MK daze ~80 frames; the input task runs every other frame
+PULL_FAST_FROM = 150          # px: Reptile's pull from further is half again as fast (his victim reels: EC frees
+                              #  him sooner than the $E of Scorpion's; the rope reaches 215+)
 PULL_SPEED = 14               # px per call; the input task runs every other frame -> ~7 px/frame (MK: ~6.4; 6 was too slow for the yank from the spear's full reach to end inside EC's hit stun after the longer hold)
 VOICE_ID = None               # his bank's clip 0 = GETOHERE (set by patches.scorpion_inputs: his slot's ids)
 FINISH_VOICE = None           # clip 1 = FINISHim
@@ -595,6 +597,8 @@ def emit_spear_miss(a, p, bare=None):
     a.w(0x0240, 0x7FFF)                  # andi.w #$7FFF,d0
     a.w(0x0C40, DIZZY)                   # cmpi.w #$1F,d0
     a.bcc(0x67, p + 'h')
+    a.w(0x0C40, ROPE_STATE)              # cmpi.w #$E,d0       the rope's hit (mkspear: EC's projectile hit)
+    a.bcc(0x67, p + 'h')
     a.w(0x0440, 0x001A)                  # subi.w #$1A,d0
     a.w(0x0C40, 0x0003)                  # cmpi.w #3,d0
     a.bcc(0x63, p + 'h')                 # bls: reeling - a hit
@@ -633,6 +637,283 @@ def emit_spear_miss(a, p, bare=None):
     a.label(p + 'v')
     a.out += bytes(2 * (2 + 6 * SPEAR_NSTEPS))
     a.label(p + 'z')
+
+
+ROPE_SHEETS = {}                  # thrower id -> (his rope's sheet, its tile source) (patches 'scorpion-rope')
+ROPE_TILES = 52                   # its VRAM block: its biggest frame's tiles (mkspear.max_tiles)
+ROPE_HIT = 0x031D                 # $78: damage 3, attack record $1D - the spear's own ('80 16 03 1D')
+ROPE_REACT = HIT_FIRST            # $A4: his hit reaction (EC's projectile hit puts him in ROPE_STATE)
+ROPE_STATE = 0x0E                 # $BE of a fighter EC's projectile hit: the spear's pull takes him from there
+ROPE_VAR = 16                     # vars a player: +0 the rope, +4 mode (1 flying, 2 on him), +6 it hit,
+                                  #  +8 its run when it hit, +10 its step, +12 runs, +14 thrown this move
+ROPE_FAR = 360                    # px from him: a miss gone off the screen
+ROPE_GRACE = 3                    # runs after its hit before it looks for his hit state
+ROPE_NEAR = 24                    # the straight rope ends this far short of the victim's x
+ROPE_STUN = 11                    # calls (2 frames) since the rope's hit + the pull's: from here the hold is cut.
+                                  #  EC lets the victim go ~48 frames after the hit (24 calls; measured from 216
+                                  #  px, a 22-frame hold: freed as the pull ended); the cut hold's steps still
+                                  #  take ~5 calls, the hit frame 2
+
+
+def emit_spear_rope(a, sheet):
+    """sr_drive (bsr'd every call of his input task, a1 = the thrower; saves what it uses): MK's
+    spear (mkspear.py). On his release frame (42:2E) the rope - an object on its own raw sheet -
+    is thrown from START px in front of him and flies SPEED px a run (every other frame); his
+    throw is held there while it flies. It is his projectile to EC ($6A38): its head's box hits
+    with the spear's attack (ROPE_HIT; his frames' own strike box is off) and the victim reels;
+    the rope then runs straight from behind him to the victim, shaking, while he holds and pulls
+    (r_drag / rs_drive), until the victim no longer reels. A miss flies off the screen: his throw
+    goes on to the bare hold (emit_spear_miss). Gone when his move ends."""
+    import mkspear
+    from inputs import ROOT
+    co = open(os.path.join(ROOT, 'extracted', 'ec_us', 'BLA.CO'), 'rb').read()
+    desc = bytearray(co[PJ_DESC:PJ_DESC + 34])
+    assert desc[0:2] == b'\x00\x44', desc.hex()
+    desc[0:4] = bytes((0, sheet, 0, 0))
+    n = [0]
+
+    def vars_of():                       # a2 = the vars of the player a1 is
+        n[0] += 1
+        a.pcrel(0x45FA, 'sr_v')          # lea sr_v(pc),a2
+        a.w(0xB3FC); a.l(0x2E188)        # cmpa.l #P1,a1
+        a.bcc(0x67, f'sr_p{n[0]}')
+        a.w(0x45EA, ROPE_VAR)            # lea ROPE_VAR(a2),a2
+        a.label(f'sr_p{n[0]}')
+    a.label('sr_drive')
+    a.w(0x48E7, 0xF0F0)                  # movem.l d0-d3/a0-a3,-(sp)
+    vars_of()
+    a.w(0x3029, 0x00BE)                  # move.w $BE(a1),d0
+    a.w(0x0240, 0x7FFF)
+    a.w(0x0C40, SPEAR_MOVE)              # cmpi.w #$34,d0
+    a.bcc(0x67, 'sr_in')
+    a.w(0x426A, 0x000E)                  # clr.w 14(a2)        not throwing: the next is new
+    a.bccw(0x60, 'sr_x')
+    a.label('sr_in')
+    a.w(0x4A6A, 0x000E)                  # tst.w 14(a2)        thrown this move?
+    a.bccw(0x66, 'sr_hold')
+    a.w(0x0C69, fr(0x422E), 0x001A)      # cmpi.w #release,$1A(a1)
+    a.bccw(0x66, 'sr_x')
+    a.w(0x357C, 0x0001, 0x000E)          # move.w #1,14(a2)
+    a.w(0x48E7, 0xFFFE)                  # movem.l d0-d7/a0-a6,-(sp)
+    a.w(0x2A49)                          # movea.l a1,a5        (the spawn takes its owner in a5)
+    a.pcrel(0x43FA, 'sr_desc')           # lea desc(pc),a1
+    a.w(0x303C, PJ_TYPE)                 # move.w #type,d0
+    a.w(0x7600)                          # moveq #0,d3
+    a.jsr(0x6BBA)
+    a.bccw(0x65, 'sr_none')              # bcs: no object free
+    a.pcrel(0x43FA, 'sr_task')           # lea task(pc),a1
+    a.w(0x2668, 0x0088)                  # movea.l $88(a0),a3
+    a.w(0x2749, 0x0004)                  # move.l a1,4(a3)
+    a.pcrel(0x43FA, 'sr_hit')            # lea hit(pc),a1
+    a.w(0x2149, 0x0084)                  # move.l a1,$84(a0)
+    a.w(0x317C, (sheet << 8) | mkspear.EMPTY, 0x001A)   # move.w #sheet:empty,$1A(a0)  (its task picks)
+    a.w(0x316D, 0x001E, 0x001E)          # move.w $1E(a5),$1E(a0)  his palette line
+    a.w(0x316D, 0x0020, 0x0020)          # move.w $20(a5),$20(a0)  (the raw draw's: palette, his facing)
+    a.w(0x2F0D)                          # move.l a5,-(sp)      its VRAM block now: it is drawn before its
+    a.w(0x2A48)                          # movea.l a0,a5         task first runs (with none, its tiles
+    a.w(0x303C, ROPE_TILES * 32)         # move.w #bytes,d0      went to VRAM 0: plane A's map)
+    a.jsr(0x6942)
+    a.w(0x204D)                          # movea.l a5,a0
+    a.w(0x2A5F)                          # movea.l (sp)+,a5
+    a.w(0x224D)                          # movea.l a5,a1        him again
+    vars_of()
+    a.w(0x2488)                          # move.l a0,(a2)       the rope
+    a.w(0x357C, 0x0001, 0x0004)          # move.w #1,4(a2)      flying
+    a.w(0x426A, 0x0006)                  # clr.w 6(a2)
+    a.w(0x426A, 0x000C)                  # clr.w 12(a2)
+    a.w(0x323C, (mkspear.START - mkspear.TIP) & 0xFFFF)   # move.w #start-tip,d1
+    a.w(0x343C, mkspear.SPEED)           # move.w #speed,d2
+    a.w(0x082D, 0x0003, 0x0020)          # btst #3,$20(a5)      facing left?
+    a.bcc(0x67, 'sr_rt')
+    a.w(0x4441)                          # neg.w d1
+    a.w(0x4442)                          # neg.w d2
+    a.label('sr_rt')
+    a.w(0x3542, 0x000A)                  # move.w d2,10(a2)     its step
+    a.w(0x302D, 0x004E)                  # move.w $4E(a5),d0
+    a.w(0xD041)                          # add.w d1,d0
+    a.w(0x3140, 0x004E)                  # move.w d0,$4E(a0)
+    a.w(0x316D, 0x0052, 0x0052)          # move.w $52(a5),$52(a0)
+    a.label('sr_none')
+    a.w(0x4CDF, 0x7FFF)                  # movem.l (sp)+,d0-d7/a0-a6
+    a.label('sr_hold')                   # flying: his throw held on its release frame
+    a.w(0x0C6A, 0x0001, 0x0004)          # cmpi.w #1,4(a2)
+    a.bcc(0x66, 'sr_h2')
+    a.w(0x0C69, fr(0x422E), 0x001A)      # cmpi.w #release,$1A(a1)
+    a.bccw(0x66, 'sr_x')
+    a.w(0x2069, 0x0088)                  # movea.l $88(a1),a0
+    a.w(0x2050)                          # movea.l (a0),a0      his move task
+    a.w(0x317C, 0x0002, 0x0026)          # move.w #2,$26(a0)    this step's ticks
+    a.bccw(0x60, 'sr_x')
+    # on him, from far: the hold's steps cut to a tick each once the pull would end after EC lets
+    # him go (ROPE_STUN calls after the hit: the pull and daze need his hit reaction on)
+    a.label('sr_h2')
+    a.w(0x0C6A, 0x0002, 0x0004)          # cmpi.w #2,4(a2)
+    a.bccw(0x66, 'sr_x')
+    a.w(0x3029, 0x001A)                  # move.w $1A(a1),d0
+    a.w(0x0C40, fr(0x4230))              # cmpi.w #hold,d0
+    a.bcc(0x67, 'sr_h3')
+    a.w(0x0C40, fr(0x4231))
+    a.bccw(0x66, 'sr_x')
+    a.label('sr_h3')
+    a.w(0x2069, 0x008C)                  # movea.l $8C(a1),a0   the victim
+    a.w(0x3028, 0x004E)                  # move.w $4E(a0),d0
+    a.w(0x9069, 0x004E)                  # sub.w $4E(a1),d0
+    a.bcc(0x6A, 'sr_h4')
+    a.w(0x4440)                          # neg.w d0
+    a.label('sr_h4')
+    a.w(0x0440, PULL_GAP)                # subi.w #gap,d0
+    a.bcc(0x6A, 'sr_h5')
+    a.w(0x7000)                          # moveq #0,d0
+    a.label('sr_h5')
+    a.w(0x48C0)                          # ext.l d0
+    a.w(0x80FC, PULL_SPEED)              # divu #speed,d0       the pull's calls
+    a.w(0xD06A, 0x000C)                  # add.w 12(a2),d0
+    a.w(0x906A, 0x0008)                  # sub.w 8(a2),d0       + calls since the hit
+    a.w(0x0C40, ROPE_STUN)               # cmpi.w #stun,d0
+    a.bccw(0x6D, 'sr_x')                 # blt: in time
+    a.w(0x2069, 0x0088)                  # movea.l $88(a1),a0
+    a.w(0x2050)                          # movea.l (a0),a0
+    a.w(0x0C68, 0x0001, 0x0026)          # cmpi.w #1,$26(a0)
+    a.bcc(0x6F, 'sr_x')
+    a.w(0x317C, 0x0001, 0x0026)          # move.w #1,$26(a0)
+    a.label('sr_x')
+    a.w(0x4CDF, 0x0F0F)                  # movem.l (sp)+,d0-d3/a0-a3
+    a.w(0x4E75)
+    # its task (a5 = it)
+    a.label('sr_task')
+    a.jsr(0x6A38)                        # his projectile now (a0 = him)
+    a.w(0x2B48, 0x0090)                  # move.l a0,$90(a5)
+    a.w(0x3B7C, ROPE_HIT, 0x0078)        # move.w #hit,$78(a5)
+    a.w(0x3B7C, ROPE_REACT, 0x00A4)      # move.w #reaction,$A4(a5)
+    a.w(0x08AD, 0x0007, 0x007D)          # bclr #7,$7D(a5)      not removed by EC as it hits (PLYR $1A030):
+                                         #  the rope stays on him
+    a.label('sr_l')
+    a.w(0x226D, 0x0090)                  # movea.l $90(a5),a1   him
+    vars_of()
+    a.w(0xBBD2)                          # cmpa.l (a2),a5       still his rope?
+    a.bccw(0x66, 'sr_gone')
+    a.w(0x3029, 0x00BE)                  # move.w $BE(a1),d0
+    a.w(0x0240, 0x7FFF)
+    a.w(0x0C40, SPEAR_MOVE)              # cmpi.w #$34,d0
+    a.bccw(0x66, 'sr_end')               # his throw is over
+    a.w(0x526A, 0x000C)                  # addq.w #1,12(a2)
+    a.w(0x0C6A, 0x0001, 0x0004)          # cmpi.w #1,4(a2)
+    a.bccw(0x66, 'sr_str')
+    a.w(0x4A6A, 0x0006)                  # tst.w 6(a2)          it hit?
+    a.bcc(0x67, 'sr_fly')
+    a.w(0x357C, 0x0002, 0x0004)          # move.w #2,4(a2)      on him now
+    a.w(0x356A, 0x000C, 0x0008)          # move.w 12(a2),8(a2)  (when)
+    a.bccw(0x60, 'sr_str')
+    a.label('sr_fly')
+    a.w(0x302A, 0x000A)                  # move.w 10(a2),d0
+    a.w(0xD16D, 0x004E)                  # add.w d0,$4E(a5)
+    a.w(0x302D, 0x004E)                  # move.w $4E(a5),d0    its waves: back to his hand
+    a.w(0x9069, 0x004E)                  # sub.w $4E(a1),d0
+    a.w(0x0829, 0x0003, 0x0020)          # btst #3,$20(a1)      (facing left: from him the other way)
+    a.bcc(0x67, 'sr_fk')
+    a.w(0x4440)                          # neg.w d0
+    a.label('sr_fk')
+    a.w(0x0640, mkspear.HAND + 31)       # addi.w #hand+31,d0
+    a.bcc(0x6A, 'sr_fk2')
+    a.w(0x7000)                          # moveq #0,d0
+    a.label('sr_fk2')
+    a.w(0xEA48)                          # lsr.w #5,d0          k
+    a.w(0x0C40, mkspear.UNITS)
+    a.bcc(0x6F, 'sr_fk3')
+    a.w(0x7000 | mkspear.UNITS)          # moveq #units,d0
+    a.label('sr_fk3')
+    a.w(0xD040)                          # add.w d0,d0
+    a.w(0x082A, 0x0001, 0x000D)          # btst #1,13(a2)       MK's wiggle: every 2 runs
+    a.bcc(0x67, 'sr_fk4')
+    a.w(0x5240)                          # addq.w #1,d0
+    a.label('sr_fk4')
+    a.w(0x0640, mkspear.FLY)             # addi.w #fly,d0
+    a.w(0x1B40, 0x001B)                  # move.b d0,$1B(a5)
+    a.w(0x302D, 0x004E)                  # move.w $4E(a5),d0
+    a.w(0x9069, 0x004E)                  # sub.w $4E(a1),d0
+    a.bcc(0x6A, 'sr_fp')
+    a.w(0x4440)                          # neg.w d0
+    a.label('sr_fp')
+    a.w(0x0C40, ROPE_FAR)                # cmpi.w #far,d0
+    a.bccw(0x6E, 'sr_end')               # bgt: off the screen, a miss
+    a.w(0x3029, 0x0052)                  # move.w $52(a1),d0
+    a.bccw(0x60, 'sr_y')
+    a.label('sr_str')                    # on him: straight, from behind the thrower to him
+    a.w(0x0C6A, 0x0002, 0x0004)          # cmpi.w #2,4(a2)
+    a.bccw(0x66, 'sr_end')
+    a.w(0x2669, 0x008C)                  # movea.l $8C(a1),a3   the victim
+    a.w(0x302B, 0x00BE)                  # move.w $BE(a3),d0
+    a.w(0x0240, 0x7FFF)
+    a.w(0x0C40, ROPE_STATE)              # cmpi.w #$E,d0       hit by it
+    a.bcc(0x67, 'sr_on')
+    a.w(0x0440, HIT_FIRST)               # subi.w #first,d0
+    a.w(0x0C40, HIT_LAST - HIT_FIRST)
+    a.bcc(0x63, 'sr_on')                 # bls: reeling
+    a.w(0x302A, 0x000C)                  # move.w 12(a2),d0     (EC takes a frame or two to put him
+    a.w(0x906A, 0x0008)                  # sub.w 8(a2),d0        in his hit state)
+    a.w(0x0C40, ROPE_GRACE)
+    a.bccw(0x6C, 'sr_end')               # bge: he reels no more (pulled in, dazed - or free; blocked)
+    a.label('sr_on')
+    a.w(0x302B, 0x004E)                  # move.w $4E(a3),d0
+    a.w(0x9069, 0x004E)                  # sub.w $4E(a1),d0
+    a.bcc(0x6A, 'sr_sp')
+    a.w(0x4440)                          # neg.w d0
+    a.label('sr_sp')
+    a.w(0x0640, (mkspear.HAND_BACK - ROPE_NEAR) & 0xFFFF)   # addi.w #back-near,d0   its length
+    a.bcc(0x6A, 'sr_sl')
+    a.w(0x7000)                          # moveq #0,d0
+    a.label('sr_sl')
+    a.w(0x48C0)                          # ext.l d0
+    a.w(0x80FC, 24)                      # divu #24,d0
+    a.w(0x0C40, mkspear.STRAIGHT_MAX - 1)
+    a.bcc(0x6F, 'sr_sn')
+    a.w(0x7000 | (mkspear.STRAIGHT_MAX - 1))   # moveq #max,d0
+    a.label('sr_sn')
+    a.w(0x0640, mkspear.STRAIGHT)        # addi.w #straight,d0
+    a.w(0x1B40, 0x001B)                  # move.b d0,$1B(a5)
+    a.w(0x303C, 128 - mkspear.HAND_BACK)   # move.w #128-back,d0
+    a.w(0x0829, 0x0003, 0x0020)          # btst #3,$20(a1)
+    a.bcc(0x67, 'sr_sr')
+    a.w(0x4440)                          # neg.w d0
+    a.label('sr_sr')
+    a.w(0xD069, 0x004E)                  # add.w $4E(a1),d0
+    a.w(0x3B40, 0x004E)                  # move.w d0,$4E(a5)
+    a.w(0x3029, 0x0052)                  # move.w $52(a1),d0
+    a.w(0x082A, 0x0000, 0x000D)          # btst #0,13(a2)       MK's shake: 4 px, a run each way
+    a.bcc(0x67, 'sr_y')
+    a.w(0x5840)                          # addq.w #4,d0
+    a.label('sr_y')
+    a.w(0x3B40, 0x0052)                  # move.w d0,$52(a5)
+    a.w(0x082D, 0x0007, 0x007B)          # btst #7,$7B(a5)      no VRAM block (EC had none free):
+    a.bcc(0x66, 'sr_blk')                #  nothing drawn (its tiles would go to VRAM 0)
+    a.w(0x1B7C, mkspear.EMPTY, 0x001B)   # move.b #empty,$1B(a5)
+    a.label('sr_blk')
+    a.jsr(0x68D0)                        # yield
+    a.bccw(0x60, 'sr_l')
+    a.label('sr_end')                    # done: his throw goes on (a miss: the bare hold)
+    a.w(0x4292)                          # clr.l (a2)
+    a.w(0x426A, 0x0004)                  # clr.w 4(a2)
+    a.label('sr_gone')
+    a.w(0x08ED, 0x0002, 0x0082)          # bset #2,$82(a5)      gone
+    a.w(0x206D, 0x0090)                  # movea.l $90(a5),a0
+    a.w(0xBBE8, 0x0122)                  # cmpa.l $122(a0),a5   still his projectile?
+    a.bcc(0x66, 'sr_g2')
+    a.w(0x42A8, 0x0122)                  # clr.l $122(a0)       he may throw again
+    a.label('sr_g2')
+    a.jmp(0x6A1A)
+    # EC's hit callback (a5 = it): it hit - no more hits from it
+    a.label('sr_hit')
+    a.w(0x48E7, 0x0060)                  # movem.l a1-a2,-(sp)
+    a.w(0x226D, 0x0090)                  # movea.l $90(a5),a1
+    vars_of()
+    a.w(0x357C, 0x0001, 0x0006)          # move.w #1,6(a2)
+    a.w(0x42A9, 0x0122)                  # clr.l $122(a1)
+    a.w(0x4CDF, 0x0600)                  # movem.l (sp)+,a1-a2
+    a.w(0x4E75)
+    a.label('sr_desc')
+    a.out += bytes(desc)
+    a.label('sr_v')
+    a.out += bytes(2 * ROPE_VAR)
 
 
 def r_drag(a):
@@ -689,6 +970,18 @@ def r_drag(a):
     a.w(0x0C69, SCORPION_ID, 0x004C)     # cmpi.w #id,$4C(a1)
     a.bccw(0x66, 'd_nod')
     emit_spear_miss(a, 'sm_')
+    if SCORPION_ID in ROPE_SHEETS:       # MK's spear: its rope flies (mkspear.py) - its code in his .PL's
+        assert SCO_TAIL['off'] is not None   #  tail (his block is full), position-free
+        r = Asm(0)
+        emit_spear_rope(r, ROPE_SHEETS[SCORPION_ID][0])
+        tail = bytearray(SCO_TAIL['data'])
+        tail += bytes(len(tail) % 2)
+        at = len(tail) + r.labels['sr_drive']
+        SCO_TAIL['data'] = bytes(tail + r.build())
+        a.w(0x2F08)                      # move.l a0,-(sp)
+        a.bccw(0x61, 'sco_tail')         # bsr sco_tail        a0 = the tail
+        a.w(0x4EA8, at)                  # jsr sr_drive(a0)
+        a.w(0x205F)                      # movea.l (sp)+,a0
     emit_zblock(a)
     a.bccw(0x61, 'zblock')               # bsr zblock          Z: MK's Block
     # his basic attacks play MK's animation (tools/lib/mkscripts.py): his move
@@ -696,13 +989,14 @@ def r_drag(a):
     a.w(0x2069, 0x00A6)                  # movea.l $A6(a1),a0
     # (a loop over (4 * id, offset) words: smaller than a pea / move.l pair each)
     a.w(0x48E7, 0x4018)                  # movem.l d1/a3-a4,-(sp)
-    a.pcrel(0x47FA, 'mstab')             # lea mstab(pc),a3
-    if SCO_TAIL['off'] is not None:      # his scripts in his .PL's tail
+    if SCO_TAIL['off'] is not None:      # his scripts in his .PL's tail, and this table
         a.w(0x2F08)                      # move.l a0,-(sp)
         a.bccw(0x61, 'sco_tail')         # bsr sco_tail        a0 = the tail
         a.w(0x2848)                      # movea.l a0,a4
         a.w(0x205F)                      # movea.l (sp)+,a0
+        a.w(0x47EC, SCO_TAIL['mstab'])   # lea mstab(a4),a3
     else:
+        a.pcrel(0x47FA, 'mstab')         # lea mstab(pc),a3
         a.w(0x284B)                      # movea.l a3,a4
     a.label('ms_l')
     a.w(0x301B)                          # move.w (a3)+,d0     4 * move id
@@ -862,9 +1156,21 @@ def r_drag(a):
     a.w(0x4A69, 0x0076)                  # tst.w $76(a1)       knocked out by it (in the air: EC's
     a.bccw(0x67, 'd_out')                #  knockdown) - EC's KO, not our pull and daze: the round never ended
     a.w(0x3029, 0x00BE)                  # move.w $BE(a1),d0
+    a.w(0x0C40, ROPE_STATE)              # cmpi.w #$E,d0       the rope's hit (EC's projectile hit) ...
+    a.bcc(0x67, 'd_irope')
+    a.w(0x0C40, 0x8000 | ROPE_STATE)     # (bit 15: EC's flag)
+    a.bcc(0x66, 'd_nrope')
+    a.label('d_irope')
+    a.w(0x3029, 0x0052)                  # move.w $52(a1),d0
+    a.w(0x5840)                          # addq.w #4,d0
+    a.w(0xB06E, 0x1496)                  # cmp.w $1496(a6),d0  ... on the floor (in the air: EC's knockdown -
+    a.bccw(0x6D, 'd_out')                #  pulled and dazed mid-fall, EC's landing code looped: a hang)
+    a.bcc(0x60, 'd_rope')
+    a.label('d_nrope')
     a.w(0x0440, HIT_FIRST)               # subi.w #first,d0
     a.w(0x0C40, HIT_LAST - HIT_FIRST)    # cmpi.w #n,d0
     a.bccw(0x62, 'd_out')                 # bhi: not reeling
+    a.label('d_rope')
     a.w(0xB3EA, 96)                      # cmpa.l 96(a2),a1     speared in the air (r_hit):
     a.bccw(0x67, 'd_out')                #  EC's knockdown, not ours
     a.w(0x42A9, 0x00C6)                  # clr.l $C6(a1)        no knock-back
@@ -1330,12 +1636,8 @@ def r_teleport(a):
         a.w(fr(f), n, 0, 0, f6, x)
     a.w(0x00D8, 0x0006, 0x0008, 0x0000, 0xFFF8, 0x0000)   # Blade's dash ending
     a.w(0, 0, 0, 0, 0, 0)
-    a.label('mstab')                     # (4 * move id, his script - base) words, then -1
-    if SCO_TAIL['off'] is not None:      # base: his .PL's tail (SCO_TAIL, patches.scorpion_inputs)
-        for mid in sorted(MK_SCRIPTS):
-            a.w(4 * mid, SCO_TAIL['offs'][mid])
-        a.w(0xFFFF)
-    else:                                # base: mstab
+    if SCO_TAIL['off'] is None:          # (in his .PL's tail: ext_block)
+        a.label('mstab')                 # (4 * move id, his script - base) words, then -1
         for mid in sorted(MK_SCRIPTS):
             a.w(4 * mid)
             a.wdiff(f'ms_{mid}', 'mstab')
@@ -2182,6 +2484,10 @@ def ext_block():
             SCO_TAIL['offs'][mid] = len(tail)
             tail += script_bytes(sc)
             tail += bytes(len(tail) % 2)
+        SCO_TAIL['mstab'] = len(tail)    # (4 * move id, his script - the tail) words, then -1 (r_drag)
+        for mid in sorted(MK_SCRIPTS):
+            tail += struct.pack('>HH', 4 * mid, SCO_TAIL['offs'][mid])
+        tail += b'\xff\xff'
         SCO_TAIL['data'] = bytes(tail)
     a = Asm(0)
     raws = {}
@@ -6623,9 +6929,21 @@ def emit_reptile_spear(a):
     PULL_SPEED px a call to PULL_GAP and dazes him (EC's dizzy) for DAZE_CALLS calls;
     then he is sent back to standing with EC's dizzy-exit cleanup. Saves what it uses."""
     a.label('rs_drive')
-    a.w(0x48E7, 0x80B0)                  # movem.l d0/a0/a2-a3,-(sp)
+    a.w(0x48E7, 0xC0B0)                  # movem.l d0-d1/a0/a2-a3,-(sp)
     import patches                       # missed / blocked: his bare throw, as Scorpion's (MK draws
     emit_spear_miss(a, 'rsm_', patches.REPTILE.spear_bare)   #  Reptile with Scorpion's sprites)
+    if SCORPION_ID in ROPE_SHEETS:       # MK's spear: its rope flies (mkspear.py) - its code in his .PL's
+        assert GEN_TAIL.get('off') is not None   #  tail, position-free (his block is full)
+        r = Asm(0)
+        emit_spear_rope(r, ROPE_SHEETS[SCORPION_ID][0])
+        tail = bytearray(GEN_TAIL['data'])
+        tail += bytes(len(tail) % 2)
+        at = len(tail) + r.labels['sr_drive']
+        GEN_TAIL['data'] = bytes(tail + r.build())
+        a.w(0x2F08)                      # move.l a0,-(sp)
+        a.bccw(0x61, 'pl_tail')          # bsr pl_tail         a0 = his tail
+        a.w(0x4EA8, at)                  # jsr sr_drive(a0)
+        a.w(0x205F)                      # movea.l (sp)+,a0
     a.pcrel(0x45FA, 'rs_v')              # lea rs_v(pc),a2     +0 his idle PC, +4 dazed, +8 calls
     # the CPU (CHX.AI knows Blade's $34 and $35 only): every other spear it starts is
     # the ice blast instead (MK's Reptile throws both) - his move task is sent back to
@@ -6711,9 +7029,14 @@ def emit_reptile_spear(a):
     a.w(0x4A6B, 0x0076)                  # tst.w $76(a3)       knocked out by it: EC's KO
     a.bccw(0x67, 'rs_out')
     a.w(0x302B, 0x00BE)                  # move.w $BE(a3),d0
+    a.w(0x0C40, ROPE_STATE)              # cmpi.w #$E,d0       the rope's hit (EC's projectile hit)
+    a.bcc(0x67, 'rs_rope')
+    a.w(0x0C40, 0x8000 | ROPE_STATE)     # (bit 15: EC's flag)
+    a.bcc(0x67, 'rs_rope')
     a.w(0x0440, HIT_FIRST)               # subi.w #first,d0
     a.w(0x0C40, HIT_LAST - HIT_FIRST)    # cmpi.w #n,d0
     a.bccw(0x62, 'rs_out')               # bhi: not reeling
+    a.label('rs_rope')
     if RS_SOUNDS:                        # MK: the victim screams at the hit (a man's or a woman's)
         a.w(0x08EA, 0x0000, 0x0011)      # bset #0,17(a2)      (once a throw)
         a.bcc(0x66, 'rs_said')
@@ -6757,20 +7080,23 @@ def emit_reptile_spear(a):
         a.label('rs_ysaid')
     a.w(0x3769, 0x00B6, 0x00B6)          # move.w $B6(a1),$B6(a3)  along the floor
     a.w(0x3769, 0x00B6, 0x0052)          # move.w $B6(a1),$52(a3)
+    a.w(0x323C, PULL_SPEED)              # move.w #speed,d1    (toward him)
     a.w(0x302B, 0x00B2)                  # move.w $B2(a3),d0
     a.w(0x9069, 0x00B2)                  # sub.w $B2(a1),d0    gap (victim - Reptile)
     a.bcc(0x6A, 'rs_right')              # bpl
     a.w(0x4440)                          # neg.w d0
-    a.w(0x0C40, PULL_GAP)
-    a.bcc(0x6F, 'rs_near')               # ble
-    a.w(0x066B, PULL_SPEED, 0x00B2)      # addi.w #SPEED,$B2(a3)
-    a.w(0x066B, PULL_SPEED, 0x004E)      # addi.w #SPEED,$4E(a3)
-    a.bcc(0x60, 'rs_out')
+    a.w(0x4441)                          # neg.w d1
     a.label('rs_right')
     a.w(0x0C40, PULL_GAP)
-    a.bcc(0x6F, 'rs_near')
-    a.w(0x046B, PULL_SPEED, 0x00B2)      # subi.w #SPEED,$B2(a3)
-    a.w(0x046B, PULL_SPEED, 0x004E)      # subi.w #SPEED,$4E(a3)
+    a.bcc(0x6F, 'rs_near')               # ble
+    a.w(0x0C40, PULL_FAST_FROM)          # from across the screen (the rope's reach) half again as fast:
+    a.bcc(0x6F, 'rs_slow')               #  in before EC lets him go
+    a.w(0x3001)                          # move.w d1,d0
+    a.w(0xE240)                          # asr.w #1,d0
+    a.w(0xD240)                          # add.w d0,d1
+    a.label('rs_slow')
+    a.w(0x936B, 0x00B2)                  # sub.w d1,$B2(a3)
+    a.w(0x936B, 0x004E)                  # sub.w d1,$4E(a3)
     a.bcc(0x60, 'rs_out')
     a.label('rs_near')                   # yanked in: dazed (his move task resumes in EC's dizzy)
     a.w(0x217C); a.l(DIZZY_CODE); a.w(0x0004)   # move.l #dizzy,4(a0)
@@ -6778,7 +7104,7 @@ def emit_reptile_spear(a):
     a.w(0x254B, 0x0004)                  # move.l a3,4(a2)
     a.w(0x357C, DAZE_CALLS, 0x0008)      # move.w #calls,8(a2)
     a.label('rs_out')
-    a.w(0x4CDF, 0x0D01)                  # movem.l (sp)+,d0/a0/a2-a3
+    a.w(0x4CDF, 0x0D03)                  # movem.l (sp)+,d0-d1/a0/a2-a3
     a.w(0x4E75)
     a.label('rs_spr')                    # (his move task, a5 = him) the spear, as if chosen
     a.w(0x7000 | SPEAR_MOVE)             # moveq #$34,d0
@@ -7611,6 +7937,7 @@ SPEAR_SCRIPT_EDITS = [
     (0x26638, '8016031d', '00060000'),     # 42:31 second rope hit
     (0x2668C, '8016031d', '00060000'),     # 42:35 hit
     (0x266BC, '8012031d', '00060000'),     # 42:33 throw over the head
+    (0x26608, '8016031d', '00060000'),     # 42:2F the hand's hit: the rope hits now, from any distance (mkspear)
 ]
 STAND_STILL = range(0x266E0, 0x2674C + 1, 12)   # 40:64-40:6D recovery steps: no forward drift
 STEP_FORWARD = range(0x26704, 0x26740 + 1, 12)  # '04 xx 04 1A' steps (40:67-40:6B): walk-forward events -> plain

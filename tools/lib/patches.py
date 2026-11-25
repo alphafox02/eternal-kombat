@@ -1225,6 +1225,7 @@ def scorpion_inputs(ec, sources):
         (ids[n] for n in ('GETOHERE.SVX', 'FINISHim.SVX', 'FINISHER.SVX', 'MALEHURT.SVX', 'GIRLHURT.SVX'))
     sub = ec.read_file('SUB.BIN')
     at = (len(sub) + 1) & ~1
+    add_rope(ec)                         # MK's spear: a rope of its own
     # his MK attack scripts go after his .PL's chunk chain (mkinputs.SCO_TAIL): room in his block
     pl = ec.read_file(host('PL'))
     end = pl_chain_end(pl)
@@ -1288,6 +1289,26 @@ DASH_TUNE = {'raiden': (7, 19), 'subzero': (6, 9), 'liukang': (7, 12), 'kano': (
 SQUARE_STEPS = {1: (0x17, 0x30), 2: (0x16, 0x31), 5: (0x61, 0x32), 6: (0x16, 0x34)}
 
 
+ROPE_CHUNKS = {22: (0xF6, 0x126), 26: (0xF7, 0x127)}   # thrower id -> his spear rope's sheet and tile
+                                  # source (mkspear: ids no EC or MK file registers)
+
+
+def add_rope(ec):
+    """MK's spear rope (mkspear.py, mkinputs.emit_spear_rope): its raw tile source and sheet go at the
+    end of his .PL's chunk chain (EC's loader registers them with the file)."""
+    import mkspear, mkinputs, scorpion_full
+    sheet, slot = ROPE_CHUNKS[HOST_ID]
+    pl = ec.read_file(host('PL'))
+    end = pl_chain_end(pl)
+    makers, nt = mkspear.chunks(sheet, slot, scorpion_full.remap_colours)
+    assert mkspear.max_tiles() == mkinputs.ROPE_TILES, mkspear.max_tiles()
+    tiles = makers[('tiles', slot)](end)
+    sh = makers[('sheet', sheet)](end + len(tiles))
+    ec.replace_file(host('PL'), pl[:end] + tiles + sh + pl[end:])
+    mkinputs.ROPE_SHEETS[HOST_ID] = (sheet, slot)
+    print(f'        the spear\'s rope: sheet ${sheet:X}, {nt} tiles, {len(tiles) + len(sh)} bytes in {host("PL")}')
+
+
 def pl_chain_end(pl):
     """Offset of a .PL's terminating zero chunk length."""
     o = 0
@@ -1303,6 +1324,8 @@ def mk_code(ec, sources):
     import mkinputs
     mkinputs.RS_SOUNDS = dict(getattr(SPEC, 'voice', {})) if SPEC.key == 'reptile' else {}
     co = bytearray(mkinputs.recovery_still(ec.read_file(host('CO'))))   # his projectile's recovery: no drift
+    if SPEC.key == 'reptile':
+        add_rope(ec)                         # MK's spear: a rope of its own (before his tail is placed)
     if SPEC.key == 'reptile':                # his spear as Scorpion's (mkinputs.spear_script): only the
         for off, exp, new in mkinputs.SPEAR_SCRIPT_EDITS:      # rope's hit, on MK's timeline
             o = off - 0x21800

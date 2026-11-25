@@ -86,6 +86,7 @@ What you run: find your discs, make `extracted/` from them, build the disc, play
 | `mkpalettes.py` | Read the fight palettes used by mk_meta directly from MK CD's PAC.PRG. |
 | `mkpitsound.py` | Record MK CD's own Pit fall soundtrack (the uppercut off the bridge), from the user's MK disc. |
 | `mkportrait.py` | Capture Scorpion's portrait from MK's character-select screen (build/states/mk_select.state) into extracted/mk_moves/portrait.png (RGB, native pixels). |
+| `mkspear.py` | Scorpion's and Reptile's spear as MK throws it: the rope (wavy in flight, straight on the victim) cut from MK's capture into a raw sheet of its own; his spear poses without it. Run alone it writes a preview of the frames. |
 | `mkprojectile.py` | MK projectiles as EC effect art: the flying part of an MK special (Raiden's lightning ball, Sub-Zero's ice, Johnny's green bolt), cut out of the MK capture. |
 | `mkrecipes.py` | MK captures as recipes (docs/research/reproducibility_2026-11.md): the MK frames drawn into each captured pose, as numbers. |
 | `mksch.py` | Decode MK Sega CD fighter frames directly from a fighter's OBJ/SCH files. |

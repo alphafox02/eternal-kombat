@@ -93,6 +93,9 @@ def load_action(root, name):
                 ys, xs = np.nonzero(stripped[k])
                 raw_anchors[k] = [int(round(xs[ys < ys.min() + 12].mean())), raw_anchors[k][1]]
         poses = stripped
+    if name == 'spear':                  # MK's rope and spear head: an object of their own (mkspear)
+        import mkspear
+        poses = np.array([mkspear.strip_rope(p, a) for p, a in zip(poses, raw_anchors)])
     anchors = steady_anchors(name, raw_anchors)
     if name in KEEP_HEIGHT and name != 'torpedo':   # MK's height, but no higher than a frame reaches
         for k, a in enumerate(anchors):          # (MAX_UP above the anchor, scaled): else its top is cut
@@ -894,9 +897,7 @@ def build(pl, root):
             if end is None:
                 end = t + 2
             pieces = cut[g][0]
-            if g and g[0] == 'spear':
-                spear_reach(pl, q0, (sid, f))       # the rope: Blade's reach, stretched
-            elif g and g[0] in PROJECTILES:
+            if g and g[0] in PROJECTILES:      # (the spear too: its rope hits, mkinputs.emit_spear_rope)
                 no_strike(pl, q0)                   # a bolt: its flying object hits (mkinputs.emit_proj)
             elif not os.environ.get('EK_NOFIT'):
                 ext = extents(pieces)

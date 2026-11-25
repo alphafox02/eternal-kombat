@@ -247,7 +247,9 @@ the 32X build): reports from real hardware are welcome.
 ## Known issues
 
 - **Scorpion's and Reptile's spear** holds the victim 22 frames before the yank; MK's holds 35
-  (longer here, EC's hit stun runs out and the victim walks free).
+  (longer here, EC's hit stun runs out and the victim walks free). Thrown from far, the hold is
+  shorter still, so the longer yank ends in time. The flying rope reaches back to his hand, where
+  MK's runs on behind him to the screen's edge.
 - **Fewer of MK's poses:** a knockdown shows about 5 of MK's (Scorpion 4; Kano lies flat without MK's
   getting up), throws and projectile casts 6-11 of MK's ~25: the fighters' art memory is full.
 - **Blast's Vendetta** can't be done on an MK fighter yet: switched off. Where the tests land it (on
