@@ -110,9 +110,8 @@ LAUNCH_DX = 3                 # px per call backwards (~100 px over the flight; 
 LAUNCH_AT = 0x19870           # fighter hit path after the reaction: move.w $1444(a6),d1 ; move.w $1446(a6),d2
 LAUNCH_ORIG = bytes.fromhex('322e1444342e1446')
 DAZE_CALLS = 40               # MK daze ~80 frames; the input task runs every other frame
-PULL_FAST_FROM = 150          # px: Reptile's pull from further is half again as fast (his victim reels: EC frees
-                              #  him sooner than the $E of Scorpion's; the rope reaches 215+)
-PULL_SPEED = 14               # px per call; the input task runs every other frame -> ~7 px/frame (MK: ~6.4; 6 was too slow for the yank from the spear's full reach to end inside EC's hit stun after the longer hold)
+PULL_SPEED = 14               # px per call; the input task runs every other frame -> ~7 px/frame (MK: ~6.5 from any
+                              #  distance - tools/dev/spearcmp.py - the victim pinned till then: emit_spear_rope)
 VOICE_ID = None               # his bank's clip 0 = GETOHERE (set by patches.scorpion_inputs: his slot's ids)
 FINISH_VOICE = None           # clip 1 = FINISHim
 FINISH_VOICE_F = None         # clip 2 = FINISHER: MK says 'FINISH HER' to a woman
@@ -650,10 +649,6 @@ ROPE_FAR = 360                    # px from him: a miss gone off the screen
 ROPE_FLY_MAX = 40                 # calls his throw is held for its flight at most (ROPE_FAR / SPEED: ~24)
 ROPE_GRACE = 3                    # runs after its hit before it looks for his hit state
 ROPE_NEAR = 24                    # the straight rope ends this far short of the victim's x
-ROPE_STUN = 11                    # calls (2 frames) since the rope's hit + the pull's: from here the hold is cut.
-                                  #  EC lets the victim go ~48 frames after the hit (24 calls; measured from 216
-                                  #  px, a 22-frame hold: freed as the pull ended); the cut hold's steps still
-                                  #  take ~5 calls, the hit frame 2
 
 
 def emit_spear_rope(a, sheet):
@@ -663,8 +658,9 @@ def emit_spear_rope(a, sheet):
     throw is held there while it flies. It is his projectile to EC ($6A38): its head's box hits
     with the spear's attack (ROPE_HIT; his frames' own strike box is off) and the victim reels;
     the rope then runs straight from behind him to the victim, shaking, while he holds and pulls
-    (r_drag / rs_drive), until the victim no longer reels. A miss flies off the screen: his throw
-    goes on to the bare hold (emit_spear_miss). Gone when his move ends."""
+    (r_drag / rs_drive), until the victim no longer reels; the victim pinned meanwhile, bleeding (sr_h2).
+    A miss flies off the screen: his throw goes on to the bare hold (emit_spear_miss). Gone when his
+    move ends."""
     import mkspear
     from inputs import ROOT
     co = open(os.path.join(ROOT, 'extracted', 'ec_us', 'BLA.CO'), 'rb').read()
@@ -760,38 +756,57 @@ def emit_spear_rope(a, sheet):
     a.w(0x4292)                          # clr.l (a2)
     a.w(0x426A, 0x0004)                  # clr.w 4(a2)
     a.bccw(0x60, 'sr_x')
-    # on him, from far: the hold's steps cut to a tick each once the pull would end after EC lets
-    # him go (ROPE_STUN calls after the hit: the pull and daze need his hit reaction on)
+    # on him: MK pins him where he stands, bleeding, until the yank brings him in. EC's projectile hit
+    # (ROPE_STATE) lets a fighter go ~26 frames after it (his move task: +$3A the hit script's step's
+    # ticks, +$1C its stun) and walks him free by ~48: both held while he's on the rope - his throw's
+    # hold is then MK's at any distance. Brought in (PULL_GAP: r_drag / rs_drive daze him), let go.
     a.label('sr_h2')
     a.w(0x0C6A, 0x0002, 0x0004)          # cmpi.w #2,4(a2)
     a.bccw(0x66, 'sr_x')
-    a.w(0x3029, 0x001A)                  # move.w $1A(a1),d0
-    a.w(0x0C40, fr(0x4230))              # cmpi.w #hold,d0
-    a.bcc(0x67, 'sr_h3')
-    a.w(0x0C40, fr(0x4231))
-    a.bccw(0x66, 'sr_x')
-    a.label('sr_h3')
     a.w(0x2069, 0x008C)                  # movea.l $8C(a1),a0   the victim
-    a.w(0x3028, 0x004E)                  # move.w $4E(a0),d0
-    a.w(0x9069, 0x004E)                  # sub.w $4E(a1),d0
+    a.w(0x4A68, 0x0076)                  # tst.w $76(a0)        knocked out by it: EC's KO
+    a.bccw(0x67, 'sr_x')
+    a.w(0x3028, 0x00BE)                  # move.w $BE(a0),d0    in its hit (not ending it: bit 15) -
+    a.w(0x0C40, ROPE_STATE)              # cmpi.w #$E,d0         Scorpion's - or reeling (Reptile's)
+    a.bcc(0x67, 'sr_h3')
+    a.w(0x0440, HIT_FIRST)               # subi.w #first,d0
+    a.w(0x0C40, HIT_LAST - HIT_FIRST)
+    a.bccw(0x62, 'sr_x')                 # bhi
+    a.label('sr_h3')
+    a.w(0x2668, 0x0088)                  # movea.l $88(a0),a3
+    a.w(0x2653)                          # movea.l (a3),a3      his move task
+    a.w(0x3028, 0x00B2)                  # move.w $B2(a0),d0
+    a.w(0x9069, 0x00B2)                  # sub.w $B2(a1),d0
     a.bcc(0x6A, 'sr_h4')
     a.w(0x4440)                          # neg.w d0
     a.label('sr_h4')
-    a.w(0x0440, PULL_GAP)                # subi.w #gap,d0
-    a.bcc(0x6A, 'sr_h5')
-    a.w(0x7000)                          # moveq #0,d0
+    a.w(0x0C40, PULL_GAP)                # cmpi.w #gap,d0
+    a.bcc(0x6E, 'sr_h5')                 # bgt: still out there
+    a.w(0x377C, 0x0001, 0x001C)          # move.w #1,$1C(a3)    in: his hit ends now
+    a.bccw(0x60, 'sr_x')
     a.label('sr_h5')
-    a.w(0x48C0)                          # ext.l d0
-    a.w(0x80FC, PULL_SPEED)              # divu #speed,d0       the pull's calls
-    a.w(0xD06A, 0x000C)                  # add.w 12(a2),d0
-    a.w(0x906A, 0x0008)                  # sub.w 8(a2),d0       + calls since the hit
-    a.w(0x0C40, ROPE_STUN)               # cmpi.w #stun,d0
-    a.bccw(0x6D, 'sr_x')                 # blt: in time
-    a.w(0x2069, 0x0088)                  # movea.l $88(a1),a0
-    a.w(0x2050)                          # movea.l (a0),a0
-    a.w(0x0C68, 0x0001, 0x0026)          # cmpi.w #1,$26(a0)
-    a.bcc(0x6F, 'sr_x')
-    a.w(0x317C, 0x0001, 0x0026)          # move.w #1,$26(a0)
+    a.w(0x0C6B, 0x0002, 0x003A)          # cmpi.w #2,$3A(a3)
+    a.bcc(0x6C, 'sr_h6')                 # bge
+    a.w(0x377C, 0x0002, 0x003A)          # move.w #2,$3A(a3)    his pose held
+    a.label('sr_h6')
+    a.w(0x0C6B, 0x0004, 0x001C)          # cmpi.w #4,$1C(a3)
+    a.bcc(0x6C, 'sr_h7')
+    a.w(0x377C, 0x0004, 0x001C)          # move.w #4,$1C(a3)    his stun held
+    a.label('sr_h7')
+    a.w(0x0C69, fr(0x405F), 0x001A)      # cmpi.w #last pull,$1A(a1)   the yank's last frame: held till
+    a.bcc(0x66, 'sr_h8')                 #  he's in (from the far end of the screen)
+    a.w(0x2669, 0x0088)                  # movea.l $88(a1),a3
+    a.w(0x2653)                          # movea.l (a3),a3      the thrower's move task
+    a.w(0x377C, 0x0002, 0x0026)          # move.w #2,$26(a3)
+    a.label('sr_h8')
+    a.w(0x302A, 0x000C)                  # move.w 12(a2),d0     (its runs: every frame)
+    a.w(0x0240, 0x000E)                  # andi.w #$E,d0        a spurt every 16 frames
+    a.bccw(0x66, 'sr_x')
+    a.w(0x48E7, 0x0014)                  # movem.l a3/a5,-(sp)
+    a.w(0x2648)                          # movea.l a0,a3        he bleeds ...
+    a.w(0x2A49)                          # movea.l a1,a5        ... away from the thrower
+    a.jsr(SUB_AT['blood_body'])
+    a.w(0x4CDF, 0x2800)                  # movem.l (sp)+,a3/a5
     a.label('sr_x')
     a.w(0x4CDF, 0x0F0F)                  # movem.l (sp)+,d0-d3/a0-a3
     a.w(0x4E75)
@@ -7105,12 +7120,6 @@ def emit_reptile_spear(a):
     a.label('rs_right')
     a.w(0x0C40, PULL_GAP)
     a.bcc(0x6F, 'rs_near')               # ble
-    a.w(0x0C40, PULL_FAST_FROM)          # from across the screen (the rope's reach) half again as fast:
-    a.bcc(0x6F, 'rs_slow')               #  in before EC lets him go
-    a.w(0x3001)                          # move.w d1,d0
-    a.w(0xE240)                          # asr.w #1,d0
-    a.w(0xD240)                          # add.w d0,d1
-    a.label('rs_slow')
     a.w(0x936B, 0x00B2)                  # sub.w d1,$B2(a3)
     a.w(0x936B, 0x004E)                  # sub.w d1,$4E(a3)
     a.bcc(0x60, 'rs_out')
@@ -7961,24 +7970,43 @@ HOLD_LONGER = (0x26614, 0x26620)   # the rope's hold: these steps show 42:30 (as
                                    # only show before the hit is decided). (Their words were also set to $11 as
                                    # 'durations': they are the step before's flags ($F6) - EC's duration is the word
                                    # after the frame, below - and stay EC's $0006.)
-# The spear on MK's timeline (mk_fidelity_spec 6: MK CD's capture, a hit: wind-up 3 frames a pose, the spear
-# flying 1, the hit 5, the hold ~35, the pull ~17, then 24 and 12 to the stance; ours had every step one tick and
-# was half as long, the hold ~16). EC's step: frame, ticks (x2 frames: PLYR $181DA, move.w 2(a0),$12(a4)), dx,
-# dy, flags, $102 - from BLA.CO $26588 + 12 x step. Step -> ticks (steps not named keep their one tick).
+# The spear on MK's timeline (mk_fidelity_spec 6; tools/dev/spearcmp.py sets the two side by side). MK CD:
+# the wind-up ~14 frames from the press, the rope flying from his hand as the arm goes out, the hit, the
+# victim pinned where he stands ~34 frames while Scorpion holds the rope out, the yank ~18, then the stance.
+# EC's step: frame, ticks (x2 frames: PLYR $181DA, move.w 2(a0),$12(a4)), dx, dy, flags, $102 - from BLA.CO
+# $26588 + 12 x step. Step -> ticks (steps not named keep their one tick).
 SPEAR_STEP0 = 0x26588
-SPEAR_TICKS = {0: 2, 1: 2, 2: 2, 3: 2,                  # wind-up 40:60-63: 16 frames (MK 17)
-               11: 2,                                    # the hit, 42:2F: 4 (MK 5)
-               12: 3, 13: 3, 14: 2, 15: 2, 16: 1,        # the hold, 42:30/31: 22 (MK ~35). EC's hit reaction lets
-                                                         #  the victim go ~32 frames after the hit (then a ~14-frame
-                                                         #  stagger) whatever $10C holds, and the pull and daze
-                                                         #  (r_drag) run in his input task, idle while he's stunned:
-                                                         #  the yank must end ~48 frames after the hit. 22 + the pull
-                                                         #  at 7 px a frame: dazed by 45 from the spear's full reach
-                                                         #  (Scorpion 142 px, Reptile 145); 26 lost Reptile's longest
-               27: 2, 28: 2}                             # after the pull, 40:5E/5F: 8 - MK's yank-to-free is ~37
-                                                         #  frames (86 -> 123) with the victim dazed ~80: his
-                                                         #  ~43-frame punish window; ours yanks earlier (the
-                                                         #  hold above), so the recovery is cut to keep it
+SPEAR_TICKS = {8: 2, 9: 2, 10: 2, 11: 2,                 # after the release (step 7, held while it flies): the
+               12: 2, 13: 2, 14: 2, 15: 2,               #  hold, 34 frames from the hit - the victim pinned
+               27: 2, 28: 2}                             #  (emit_spear_rope); after the pull, 40:5E/5F: 8
+# Step -> (Blade's frame, the frame it shows now). The wind-up is the first seven steps, a tick each (14 frames:
+# MK's), then step 7 is the release (42:2E: the rope thrown, his throw held there while it flies) - it was the
+# tenth, the rope out ~14 frames after MK's. The yank's steps run the pull poses in MK's order (scorpion_full
+# SPEAR_POSES: leaning back, then upright) instead of 40:5E/5F's upright first.
+SPEAR_FRAMES = {7: (0x422B, 0x422E),
+                17: (0x405E, 0x4232), 18: (0x405F, 0x4232), 19: (0x4232, 0x4233), 20: (0x4233, 0x4233),
+                21: (0x4234, 0x4234), 22: (0x4235, 0x4234), 23: (0x4234, 0x4235), 24: (0x4235, 0x4235),
+                25: (0x4232, 0x405E), 26: (0x4233, 0x405E), 27: (0x405E, 0x405F), 28: (0x405F, 0x405F)}
+SPEAR_STILL = range(4, 14)        # steps whose dx (Blade's lunge, 4 2 1 px a tick) is gone: MK's Scorpion stays put
+
+
+def spear_timeline(b):
+    """BLA.CO's spear script (a bytearray, module offsets) on MK's timeline: SPEAR_TICKS, SPEAR_FRAMES,
+    SPEAR_STILL. Frames in Blade's numbering or the fighter's own (fr)."""
+    for k, ticks in SPEAR_TICKS.items():
+        o = SPEAR_STEP0 - 0x21800 + 12 * k + 2
+        assert int.from_bytes(b[o:o + 2], 'big') == 1, (k, b[o - 2:o + 2].hex())
+        b[o:o + 2] = ticks.to_bytes(2, 'big')
+    sheet = {}                           # Blade's sheet -> the module's (Blade's, Scorpion's or a fighter's own)
+    for k, (old, new) in SPEAR_FRAMES.items():
+        f = int.from_bytes(b[SPEAR_STEP0 - 0x21800 + 12 * k:][:2], 'big')
+        assert f & 0xFF == old & 0xFF and sheet.setdefault(old >> 8, f >> 8) == f >> 8, (k, hex(f))
+    for k, (old, new) in SPEAR_FRAMES.items():
+        o = SPEAR_STEP0 - 0x21800 + 12 * k
+        b[o:o + 2] = (sheet[new >> 8] << 8 | new & 0xFF).to_bytes(2, 'big')
+    for k in SPEAR_STILL:
+        o = SPEAR_STEP0 - 0x21800 + 12 * k + 4
+        b[o:o + 2] = bytes(2)
 CLOSE_JAB_HIT2 = 0x26034      # close X script: the second punch's attack step (42:20)
 DIZZY_STEPS = (0x26314, 0x26320)   # dizzy script: 41:25 (hold 6), 41:26 (flag $2000: cut to 2 frames), then loop
 DIZZY_HOLD = 0x7FFF           # Blade's own two-frame dizzy loop barely moves: the MK blocks drive the daze (dizzy_hold)
@@ -8082,10 +8110,7 @@ def spear_script(blaco):
         f = int.from_bytes(b[o + 4:o + 6], 'big')
         assert f in (0x422E, 0x422F, fr(0x422E), fr(0x422F)), hex(f)
         b[o + 4:o + 6] = (0x4230 if f >> 8 == 0x42 else fr(0x4230)).to_bytes(2, 'big')
-    for k, ticks in SPEAR_TICKS.items():
-        o = SPEAR_STEP0 - 0x21800 + 12 * k + 2
-        assert int.from_bytes(b[o:o + 2], 'big') == 1, (k, b[o - 2:o + 2].hex())
-        b[o:o + 2] = ticks.to_bytes(2, 'big')
+    spear_timeline(b)
     # Blade's close-range X is a double punch (two hits per press); MK's jab
     # is one: the second punch's attack step becomes a plain step (moving the
     # script's end up instead froze fights). Its frames show MK's stance

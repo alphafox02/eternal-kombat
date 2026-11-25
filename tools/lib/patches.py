@@ -1331,10 +1331,7 @@ def mk_code(ec, sources):
             o = off - 0x21800
             assert co[o:o + 4].hex() == exp, hex(off)
             co[o:o + 4] = bytes.fromhex(new)
-        for k, ticks in mkinputs.SPEAR_TICKS.items():       # MK's timeline (mk_fidelity_spec 6)
-            o = mkinputs.SPEAR_STEP0 - 0x21800 + 12 * k + 2
-            assert int.from_bytes(co[o:o + 2], 'big') == 1, (k, co[o - 2:o + 2].hex())
-            co[o:o + 2] = ticks.to_bytes(2, 'big')
+        mkinputs.spear_timeline(co)                         # MK's timeline (mk_fidelity_spec 6)
     if SPEC.key in ('raiden', 'reptile'):
         # Move $31 uses our teleport script (Reptile's: his ice blast) but still runs Blade's
         # move task. Skip its original projectile spawn and resume at the normal recovery.

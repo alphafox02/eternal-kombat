@@ -447,6 +447,10 @@ def pick(poses, k, n, action=''):
     p = len(poses)
     if n is None:                                   # an exact pose (scorpion_map 'frame=pose')
         return k
+    if action == 'spear' and n == len(SPEAR_POSES):
+        raw = SPEAR_POSES[k]                        # (the capture's numbering: build dropped its stance poses)
+        kept = KEPT.get('spear', list(range(p)))
+        return min(range(len(kept)), key=lambda i: (abs(kept[i] - raw), kept[i] < raw))
     lead = stance_lead(poses) if action in JUMPS else 0
     cap = min(p - lead, CAP.get(action, DEFAULT_CAP))
     slot = 0 if n == 1 or cap == 1 else round(k * (cap - 1) / (n - 1))
@@ -461,6 +465,16 @@ def pick(poses, k, n, action=''):
 
 
 SPEAR_CLIPPED = set()          # spear poses whose head doesn't fit the tile cap (build fills it)
+# The spear group's frames (scorpion_map, in order) -> MK's pose (extracted/mk_moves/spear: 1-6 the wind-up,
+# 6-18 his arm out - the rope flying (7-14), the hit (15), the hold (16-18) - 19-26 leaning back on the
+# rope, 27-31 upright, pulling) at MK's moment of the move (mkinputs SPEAR_TICKS / SPEAR_FRAMES: the
+# wind-up 40:60-42:2A a tick each, the release and the hold 42:2E, 42:2C-42:31, the yank 42:32-42:35 then
+# 40:5E/5F). Spread evenly over the capture (pick's default), the hold showed his leaning pull and the
+# wind-up his rope-throwing arm before the rope was out. 42:2B no longer shows (step 7 is the release).
+# Eight poses, as the spread had: his .PL (with its code tail) has no room for more.
+SPEAR_POSES = (4, 4, 4, 4, 5, 5, 6, 6,             # 40:60-63, 42:28-2B
+               10, 16, 10, 16, 16, 16,             # 42:2C-31 (42:2E: the arm out as the rope flies)
+               28, 28, 19, 19, 25, 25)             # 40:5E/5F, 42:32-35
 
 
 def spear_clipped(poses, anchors, cram):
