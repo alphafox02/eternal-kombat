@@ -6,13 +6,18 @@ For each (winner, loser) on the Pit (tools/lib/duelstate.py --stage 1F), the
 deciding round is set up (one round each, the loser on low health), the winner
 walks in and uppercuts (down + Y, repeated until the loser is down), and the
 loser must end up on the spikes: the camera at the pit's floor and the loser
-lying there.
+lying there - and the winner must stay up on the bridge (EC stands a fighter on the
+floor line as his jump or win pose ends, and the fall moves that line down: an EC
+winner whose jump kick decided it once landed on the spikes too).
+A pairing ending in j (13:15j) decides it with a jump kick instead of the uppercut.
+Two EC fighters never fight on the Pit (mkstages.py's pick gives them EC's stages).
 
     pitcheck.py                       # the default pairings
     pitcheck.py 0:20 7:0              # winner:loser by select-grid presses
+    pitcheck.py 13:15j                # ... the winner jump-kicks
 
 Grid presses: 0 Shadow, 1 Larcen, 4 Trident, 6 Xavier, 7 Raiden, 8 Blade,
-9 Jetta, 11 Ramses, 14 Blast, 20 Scorpion, 15 Sub-Zero, 16 Sonya, 17 Liu Kang, 18 Kano, 19 Johnny Cage.
+9 Jetta, 11 Ramses, 13 Dawson, 14 Blast, 20 Scorpion, 15 Sub-Zero, 16 Sonya, 17 Liu Kang, 18 Kano, 19 Johnny Cage.
 """
 import os, subprocess, sys, tempfile, shutil
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))   # (the library: tools/lib/)
@@ -21,9 +26,10 @@ from inputs import ROOT
 
 P1, P2 = 0x2E188, 0x2E330
 CAM_Y = 0x2B074
+BRIDGE_Y = 206                         # the fighters' y standing on the bridge ($1496)
 NAMES = {0: 'Shadow', 1: 'Larcen', 4: 'Trident', 6: 'Xavier', 7: 'Raiden', 8: 'Blade', 9: 'Jetta',
-         11: 'Ramses', 14: 'Blast', 20: 'Scorpion', 15: 'Sub-Zero', 16: 'Sonya', 17: 'Liu Kang', 18: 'Kano', 19: 'Johnny'}
-PAIRS = [(20, 0), (0, 20), (7, 0), (15, 9), (16, 4), (0, 1), (8, 15)]
+         11: 'Ramses', 13: 'Dawson', 14: 'Blast', 20: 'Scorpion', 15: 'Sub-Zero', 16: 'Sonya', 17: 'Liu Kang', 18: 'Kano', 19: 'Johnny'}
+PAIRS = [(20, 0, ''), (0, 20, ''), (7, 0, ''), (15, 9, ''), (16, 4, ''), (8, 15, ''), (13, 15, 'j')]
 w = lambda r, a: int.from_bytes(r[a:a + 2], 'big')
 sw = lambda r, a: int.from_bytes(r[a:a + 2], 'big', signed=True)
 
@@ -31,7 +37,32 @@ sw = lambda r, a: int.from_bytes(r[a:a + 2], 'big', signed=True)
 MK_GRID = (7, 20, 15, 16, 17, 18, 19)   # MK winners: MK's rule - FINISH HIM first (tools/dev/pitvideo.py)
 
 
-def check(c, state, mk=False):
+def jump_kick(c):
+    """Player 1 jumps at her and kicks (C) in the air: from 85 px, it lands as he comes down."""
+    for _ in range(300):
+        r = c.prg_ram()
+        if abs(sw(r, P2 + 0x4E) - sw(r, P1 + 0x4E)) <= 85:
+            break
+        c.buttons[0] = {'right' if sw(r, P2 + 0x4E) > sw(r, P1 + 0x4E) else 'left'}
+        c.run(1)
+    toward = 'right' if sw(c.prg_ram(), P2 + 0x4E) > sw(c.prg_ram(), P1 + 0x4E) else 'left'
+    c.buttons[0] = set(); c.run(10)
+    for held, n in (({'up', toward}, 8), ({toward}, 4), ({'c'}, 4)):
+        c.buttons[0] = held
+        c.run(n)
+    c.buttons[0] = set()
+    best_cam, lay = 0, False
+    for _ in range(500):
+        c.run(1)
+        r = c.prg_ram()
+        best_cam = max(best_cam, w(r, CAM_Y))
+        if best_cam >= 500 and w(r, P2 + 0xBE) == 0x7FFF:
+            lay = True
+            break
+    return best_cam, lay
+
+
+def check(c, state, mk=False, jump=False):
     c.load_state(state)
     c.run(30)
     c.poke_prg(0x31D26, (1).to_bytes(2, 'big'))       # one round each: this one decides it
@@ -52,6 +83,10 @@ def check(c, state, mk=False):
             if w(c.prg_ram(), P2 + 0xBE) & 0x7FFF == 0x1F:
                 break
         c.run(50)
+    if jump:
+        best_cam, lay = jump_kick(c)
+        r = c.prg_ram()
+        return best_cam, lay, sw(r, P2 + 0x52), c.frame
     for _ in range(300):                              # walk in
         r = c.prg_ram()
         if abs(sw(r, P2 + 0x4E) - sw(r, P1 + 0x4E)) <= 50:
@@ -115,22 +150,27 @@ def check(c, state, mk=False):
 
 
 def main():
-    pairs = [tuple(int(v) for v in a.split(':')) for a in sys.argv[1:]] or PAIRS
+    pairs = [(int(a.split(':')[0]), int(a.split(':')[1].rstrip('j')), 'j' if a.endswith('j') else '')
+             for a in sys.argv[1:]] or PAIRS
     tmp = tempfile.mkdtemp()
     c = scd.Core(saves=os.path.join(ROOT, 'build', 'shots', 'probe-saves'))
     c.load(os.path.join(ROOT, 'build', 'Eternal Kombat', 'Eternal Kombat.cue'))
     bad = 0
     try:
-        for p1, p2 in pairs:
+        for p1, p2, how in pairs:
             st = os.path.join(tmp, f'{p1}_{p2}.state')
             subprocess.run([sys.executable, '-P', '-E', os.path.join(ROOT, 'tools', 'lib', 'duelstate.py'),
                             '--p1', str(p1), '--p2', str(p2), '--stage', '1F', '--out', st],
                            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            cam, lay, y, frame = check(c, st, p1 in MK_GRID)
-            ok = cam >= 500 and lay
+            cam, lay, y, frame = check(c, st, p1 in MK_GRID, how == 'j')
+            for _ in range(60):                       # the winner's pose ends: still on the bridge?
+                c.run(1)
+            up = sw(c.prg_ram(), P1 + 0x52) <= BRIDGE_Y
+            ok = cam >= 500 and lay and up
             bad += not ok
-            print(f'{NAMES.get(p1, p1):9s} uppercuts {NAMES.get(p2, p2):9s}: camera down to {cam}, '
+            print(f'{NAMES.get(p1, p1):9s} {"jump-kicks" if how else "uppercuts "} {NAMES.get(p2, p2):9s}: camera down to {cam}, '
                   f'loser at y {y}, {"lying on the spikes" if lay else "NOT down there"}'
+                  + ('' if up else f', the WINNER fell too (y {sw(c.prg_ram(), P1 + 0x52)})')
                   + ('' if ok else '   <-- FAIL'), flush=True)
             from PIL import Image
             Image.fromarray(frame).save(os.path.join(ROOT, 'build', 'shots', f'pitcheck_{p1}_{p2}.png'))

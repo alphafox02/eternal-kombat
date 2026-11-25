@@ -636,6 +636,15 @@ def pit_fall_code(cut=None):
         '6000', ('br16', 'watch'),
         ('label', 'one'),                               # a3 = fighter, d7 = 0/1, a2 = fvars
     ] + (['4a2a001c', '6600', ('br16', 'f_ret')] if cut else []) + [   # (Reptile's fight: on the bottom, no fall)
+        # the winner, while the other falls, stays on the bridge: EC stands a fighter at the floor line
+        # (as his jump - a jump kick that decided it - or his win pose ends), and that line drops
+        '3007', '0a400001', '4a320002', '6700', ('br16', 'w_ok'),   # the other one falling ...
+        '4a327002', '6600', ('br16', 'w_ok'),           # ... not this one ...
+        '322b0052', 'b252', '6f00', ('br16', 'w_ok'),   # ... and he's under the bridge's floor line
+        '3212',
+        ] + [f'3741{o:04x}' for o in POS_Y] + [
+        '42ab0062',                                     # (no fall speed)
+        ('label', 'w_ok'),
         '10327002',                                     # move.b 2(a2,d7.w),d0   state
         '0c000003', '6600', ('br16', 'f_s0'),
         '4a6b0076', '6f00', ('br16', 'f_hold'),         # done: a new round (health back)?

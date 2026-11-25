@@ -11,7 +11,7 @@ re-saves build/states/menu.state. In parallel where it can be (--jobs). Among th
     has one (tools/lib/mkfatalitycheck.py) - and in a mirror match won by player 2; quick taps at every
     timing (Scorpion's and Liu Kang's: the two fatality readers)
   - each against the CPU and in a mirror match: no freeze (tools/checks/fightcheck.py)
-  - the Pit's fall with each MK winner (tools/checks/pitcheck.py)
+  - the Pit's fall with each MK winner, an EC winner, a jump kick: the winner stays up (tools/checks/pitcheck.py)
   - the one-player Contest with each: 10 matches, then to the end of the ladder
     (Shang Tsung, the Dark Champion) and his MK ending (tools/checks/contestcheck.py)
   - Shang Tsung against MK's own: glide, skull volley, backing off a jump-in
@@ -160,6 +160,9 @@ def main():
             ("Blade's replaced scripts never run (code kept in them)", PY + [T('deadscriptcheck.py')]),
             ("Liu Kang's flying kick as MK's", PY + [T('flykickcheck.py')]),
             ("Reptile's fight starts on the Pit's bottom", PY + [T('pitstartcheck.py')]),
+            ('The Pit: a jump kick decides it, the winner stays on the bridge (Dawson on Sub-Zero)',
+             PY + [T('pitcheck.py'), '13:15j']),
+            ('The Pit: an EC winner uppercuts an MK loser (Blade on Sub-Zero)', PY + [T('pitcheck.py'), '8:15']),
             ("MK's Courtyard, Palace Gates, Warrior Shrine, Throne Room and Lair as MK shows them", PY + [T('mkstagecheck.py')]),
             ('Which stage a fight is on (MK fighters on MK stages; the Duel setting; bosses)', PY + [T('stagepickcheck.py')]),
             ("MK's FIGHT! and FINISH HIM / FINISH HER on MK's stages", PY + [T('mktextcheck.py')]),
