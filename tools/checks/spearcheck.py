@@ -9,7 +9,8 @@ within 46 frames of the hit: EC's hit reaction lets him go ~48 frames after it, 
 then lets him walk free (the hold's limit: mk_fidelity_spec 6). Also the hold: Scorpion on his rope
 frames (42:30/31) at least 20 frames from up close (Reptile's are his own sheet's); from further the
 rope cuts it short, the yank being longer (at least HOLD_FAR). And the rope flies over a crouching
-fighter (MK's), from either side.
+fighter (MK's), from either side; and Scorpion at Shadow cornered at the arena's end, ~50 px: hit, his
+throw over.
 
     spearcheck.py [--disc CUE]     (run after play.py test has made the disc's build/states/menu.state)
 """
@@ -64,6 +65,29 @@ def throw(disc, st, thrower, gap, victim_holds=()):
     return hit, daze, hold, abs(W(c.prg_ram(), thrower + 0xB2) - W(c.prg_ram(), victim + 0xB2))
 
 
+def cornered(disc, st):
+    """Scorpion (player 2, facing left) at Shadow backed into the arena's left end, ~50 px away: the rope's
+    head starts past her (a Contest once stuck there: the rope gone, his throw held for good). She must be
+    hit, and his throw must end. -> (health lost, his move 300 frames on)."""
+    c = scd.Core()
+    c.load(disc)
+    c.load_state(st)
+    c.run(20)
+    for _ in range(600):
+        r = c.prg_ram()
+        d = W(r, P2 + 0x4E) - W(r, P1 + 0x4E)
+        c.buttons = [{'left'}, {'left'} if d > 50 else ({'right'} if d < 44 else set())]
+        c.run(1)
+    c.buttons = [set(), set()]
+    c.run(10)
+    hp = W(c.prg_ram(), P1 + 0x76)
+    for b, n in [({'right'}, 3), (set(), 2), ({'right'}, 3), ({'x'}, 4), (set(), 300)]:
+        c.buttons[1] = set(b)
+        c.run(n)
+    r = c.prg_ram()
+    return hp - W(r, P1 + 0x76), W(r, P2 + 0xBE) & 0x7FFF
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--disc', default=os.path.join(ROOT, 'build', 'Eternal Kombat', 'Eternal Kombat.cue'))
@@ -93,6 +117,13 @@ def main():
             print(f'{name} at a crouching Shadow from 140 px: she loses {lost} health')
             if lost:
                 bad.append(f'{name}: the spear hit a crouching fighter')
+        st = os.path.join(tmp, 'cornered.state')
+        subprocess.run([sys.executable, '-P', '-E', os.path.join(ROOT, 'tools', 'lib', 'duelstate.py'), '--disc', a.disc,
+                        '--stage', '11', '--out', st, '--p1', '0', '--p2', '20'], check=True, capture_output=True)
+        lost, move = cornered(a.disc, st)
+        print(f'Scorpion at Shadow in the corner: she loses {lost} health; his move after: ${move:X}')
+        if not lost or move == mkinputs.SPEAR_MOVE:
+            bad.append('Scorpion at a cornered Shadow: ' + ('no hit' if not lost else 'his throw never ended'))
     for b in bad:
         print('FAIL:', b)
     print('spearcheck:', 'FAIL' if bad else 'ok')

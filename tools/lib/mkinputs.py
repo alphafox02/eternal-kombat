@@ -645,8 +645,9 @@ ROPE_HIT = 0x031D                 # $78: damage 3, attack record $1D - the spear
 ROPE_REACT = HIT_FIRST            # $A4: his hit reaction (EC's projectile hit puts him in ROPE_STATE)
 ROPE_STATE = 0x0E                 # $BE of a fighter EC's projectile hit: the spear's pull takes him from there
 ROPE_VAR = 16                     # vars a player: +0 the rope, +4 mode (1 flying, 2 on him), +6 it hit,
-                                  #  +8 its run when it hit, +10 its step, +12 runs, +14 thrown this move
+                                  #  +8 its run when it hit (flying: calls held), +10 its step, +12 runs, +14 thrown this move
 ROPE_FAR = 360                    # px from him: a miss gone off the screen
+ROPE_FLY_MAX = 40                 # calls his throw is held for its flight at most (ROPE_FAR / SPEED: ~24)
 ROPE_GRACE = 3                    # runs after its hit before it looks for his hit state
 ROPE_NEAR = 24                    # the straight rope ends this far short of the victim's x
 ROPE_STUN = 11                    # calls (2 frames) since the rope's hit + the pull's: from here the hold is cut.
@@ -720,6 +721,7 @@ def emit_spear_rope(a, sheet):
     a.w(0x2488)                          # move.l a0,(a2)       the rope
     a.w(0x357C, 0x0001, 0x0004)          # move.w #1,4(a2)      flying
     a.w(0x426A, 0x0006)                  # clr.w 6(a2)
+    a.w(0x426A, 0x0008)                  # clr.w 8(a2)
     a.w(0x426A, 0x000C)                  # clr.w 12(a2)
     a.w(0x323C, (mkspear.START - mkspear.TIP) & 0xFFFF)   # move.w #start-tip,d1
     a.w(0x343C, mkspear.SPEED)           # move.w #speed,d2
@@ -740,9 +742,23 @@ def emit_spear_rope(a, sheet):
     a.bcc(0x66, 'sr_h2')
     a.w(0x0C69, fr(0x422E), 0x001A)      # cmpi.w #release,$1A(a1)
     a.bccw(0x66, 'sr_x')
+    # - while it's there: EC can take it (thrown up close from the arena's edge its head starts past
+    # it: his throw was held for good, a Contest stuck), and not for longer than a flight can last
+    a.w(0x2052)                          # movea.l (a2),a0      the rope
+    a.w(0x0C28, sheet, 0x001A)           # cmpi.b #sheet,$1A(a0)
+    a.bcc(0x66, 'sr_lost')
+    a.w(0x0828, 0x0002, 0x0082)          # btst #2,$82(a0)      taken away
+    a.bcc(0x66, 'sr_lost')
+    a.w(0x526A, 0x0008)                  # addq.w #1,8(a2)      calls held
+    a.w(0x0C6A, ROPE_FLY_MAX, 0x0008)
+    a.bcc(0x62, 'sr_lost')               # bhi
     a.w(0x2069, 0x0088)                  # movea.l $88(a1),a0
     a.w(0x2050)                          # movea.l (a0),a0      his move task
     a.w(0x317C, 0x0002, 0x0026)          # move.w #2,$26(a0)    this step's ticks
+    a.bccw(0x60, 'sr_x')
+    a.label('sr_lost')                   # no rope: his throw goes on (a miss)
+    a.w(0x4292)                          # clr.l (a2)
+    a.w(0x426A, 0x0004)                  # clr.w 4(a2)
     a.bccw(0x60, 'sr_x')
     # on him, from far: the hold's steps cut to a tick each once the pull would end after EC lets
     # him go (ROPE_STUN calls after the hit: the pull and daze need his hit reaction on)

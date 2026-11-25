@@ -89,7 +89,9 @@ def art(remap=lambda a: a):
     y = _ec_y(WAVE_ROWS[0])
     yh = y + HEAD_ROWS[0] - WAVE_ROWS[0]                 # (as MK's: the head 2 rows under the wave's top)
     line = y + (WAVE_ROWS[1] - WAVE_ROWS[0]) // 2
-    box = (TIP - 28, TIP, line + BOX_Y[0], line + BOX_Y[1])   # (x1 x2 y1 y2: at the head)
+    # (x1 x2 y1 y2): the head and the rope behind it, back to 1 px in front of him as it's thrown (from
+    # up close - a cornered victim - the head starts past the victim)
+    box = (TIP - (START - 1), TIP, line + BOX_Y[0], line + BOX_Y[1])
     frames = []
     for k in range(UNITS + 1):
         for flip in (0, 0x1000):
