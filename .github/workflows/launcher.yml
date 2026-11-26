@@ -1,0 +1,70 @@
+# The launcher app, packaged on GitHub's machines (tools/launcher/package.py):
+# EternalKombat-x86_64.AppImage (Linux) and EternalKombat.exe (Windows).
+# No game data goes in: the player picks their own discs when the app runs.
+#
+# Run by hand (Actions > Launcher > Run workflow): the two files are the run's artifacts.
+# Pushing a tag launcher-* also publishes them as a GitHub release.
+name: Launcher
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['launcher-*']
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install Pillow
+      - run: python tools/launcher/package.py linux --out dist
+      - name: The app starts and its Python has what the build needs (no discs here)
+        run: APPIMAGE_EXTRACT_AND_RUN=1 dist/EternalKombat-x86_64.AppImage --selftest
+      - name: The build's steps list (no discs here)
+        run: build/package/stage/python/bin/python3 -P build/package/stage/app/tools/prepare.py --list
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EternalKombat-linux
+          path: dist/EternalKombat-x86_64.AppImage
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyinstaller Pillow
+      - run: python tools/launcher/package.py windows --out dist
+      - name: The build's steps list (no discs here)
+        run: build/package/stage/python/python.exe -P build/package/stage/app/tools/prepare.py --list
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EternalKombat-windows
+          path: dist/EternalKombat.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/launcher-')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/EternalKombat-x86_64.AppImage dist/EternalKombat.exe \
+            --repo "$GITHUB_REPOSITORY" --title "Eternal Kombat launcher ($GITHUB_REF_NAME)" \
+            --notes "Download the file for your system, run it, and point it at your own Eternal Champions and Mortal Kombat Sega CD discs (BIN/CUE) and Sega CD BIOS. See the README's quick start."

@@ -1,8 +1,8 @@
 # The tools, by job
 
 Every tool, one line each. The commands are at the top of `tools/`; the library they use is in
-`tools/lib/`, and five more folders hold the checks, the MK capture record, developer tools and the
-32X support's steps ([maintaining.md](maintaining.md)). Scripts in the subfolders import the library
+`tools/lib/`, and six more folders hold the checks, the MK capture record, developer tools, the
+32X support's steps and the launcher app ([maintaining.md](maintaining.md)). Scripts in the subfolders import the library
 from `tools/lib/`. Run every tool from the repo root with `.venv/bin/python -P tools/...`; each
 one's docstring has its options. `tools/checks/toolsdoccheck.py` (in the suite) fails if a tool has
 no line here, or if a line names a tool that isn't there.
@@ -239,3 +239,17 @@ descriptions are the scripts' own, from when each was a separate experiment.
 | `32x_select_incremental_hook.py` | The incremental 68000 select renderer (its set-up spread over VBlanks). |
 | `32x_select_incremental_transfer.py` | Chunked Sega CD PRG-RAM to 32X transfer, at most 512 bytes a VBlank. |
 | `32x_select_payload_probe.py` | Step 3: the 32X select-screen payload appended to GAME.CO. |
+
+## tools/launcher/: the app for players
+
+The one-file app (Windows .exe, Linux AppImage) for players who'd rather not use a terminal: it
+builds the disc from their own discs and plays it in RetroArch. Packaged on GitHub's machines by
+`.github/workflows/launcher.yml`.
+
+| tool | what it does |
+|---|---|
+| `boot.py` | Start the launcher from a packaged app: copy its tools/ and data/ to the player's folder (again for a new version), then open the window (`--selftest`: the packaging's check). |
+| `ekapp.py` | The launcher's window: find or choose the two discs and the BIOS, build the disc (prepare.py, build.py), play it, or save a copy for another emulator. |
+| `retroarch.py` | RetroArch and the Genesis Plus GX core, one pinned release downloaded from libretro once; started straight into the game with a config of ours. |
+| `package.py` | Package the launcher: a pinned portable Python, the build's packages at pinned versions, and the tracked tools/ and data/ (no game data). |
+| `winstub.py` | The Windows .exe's starter: unpack the runtime once per version, then start the launcher. |

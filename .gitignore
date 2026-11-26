@@ -17,6 +17,8 @@ bios/*
 extracted/
 # (the disc, and the emulator's output: build/states, shots, runs, saves)
 build/
+# (the launcher app, packaged: tools/launcher/package.py)
+dist/
 
 __pycache__/
 *.pyc
