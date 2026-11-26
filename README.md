@@ -246,10 +246,10 @@ the 32X build): reports from real hardware are welcome.
 
 ## Known issues
 
-- **Scorpion's and Reptile's spear:** the victim, pinned on the rope, stands in his own hit pose
-  (MK's leans toward Scorpion: EC's fighters have no such pose), and bleeds less. The flying rope
-  reaches back to his hand, where MK's runs on behind him to the screen's edge. And Scorpion's
-  spear shows 8 of MK's 35 poses (his art memory is full).
+- **Scorpion's and Reptile's spear:** an MK fighter on the rope leans back as in MK, but an EC
+  fighter stays in his own hit pose (MK has no art of them). The victim bleeds less, and is not
+  shaken on the rope as MK shakes him. The flying rope reaches back to his hand, where MK's runs on
+  behind him to the screen's edge. And Scorpion's spear shows 8 of MK's 35 poses (his art memory is full).
 - **Fewer of MK's poses:** a knockdown shows about 5 of MK's (Scorpion 4; Kano lies flat without MK's
   getting up), throws and projectile casts 6-11 of MK's ~25: the fighters' art memory is full.
 - **Blast's Vendetta** can't be done on an MK fighter yet: switched off. Where the tests land it (on

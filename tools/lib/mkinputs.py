@@ -651,6 +651,21 @@ ROPE_GRACE = 3                    # runs after its hit before it looks for his h
 ROPE_NEAR = 24                    # the straight rope ends this far short of the victim's x
 
 
+SPEARED = 0x4227                  # an MK fighter's speared pose (scorpion_map 'speared'), Blade's numbering
+SPEARED_IDS = 27                  # fighter ids 0-26
+
+
+def speared_frames():
+    """The pose each fighter (by id, $4C) holds on the rope, as MK leans its victim back
+    (tools/capture/mkspeared.py): the MK fighters' 42:27 in his own sheets; 0 for the
+    others (their hit pose)."""
+    import patches
+    t = [0] * SPEARED_IDS
+    for sp in patches.MK_SPECS:
+        t[sp.host_id] = SPEARED + ((sp.sheet_base - 0x40) << 8)
+    return b''.join(w.to_bytes(2, 'big') for w in t)
+
+
 def emit_spear_rope(a, sheet):
     """sr_drive (bsr'd every call of his input task, a1 = the thrower; saves what it uses): MK's
     spear (mkspear.py). On his release frame (42:2E) the rope - an object on its own raw sheet -
@@ -658,7 +673,8 @@ def emit_spear_rope(a, sheet):
     throw is held there while it flies. It is his projectile to EC ($6A38): its head's box hits
     with the spear's attack (ROPE_HIT; his frames' own strike box is off) and the victim reels;
     the rope then runs straight from behind him to the victim, shaking, while he holds and pulls
-    (r_drag / rs_drive), until the victim no longer reels; the victim pinned meanwhile, bleeding (sr_h2).
+    (r_drag / rs_drive), until the victim no longer reels; the victim pinned meanwhile, bleeding, in
+    his speared pose (sr_h2, speared_frames).
     A miss flies off the screen: his throw goes on to the bare hold (emit_spear_miss). Gone when his
     move ends."""
     import mkspear
@@ -793,6 +809,15 @@ def emit_spear_rope(a, sheet):
     a.bcc(0x6C, 'sr_h7')
     a.w(0x377C, 0x0004, 0x001C)          # move.w #4,$1C(a3)    his stun held
     a.label('sr_h7')
+    a.w(0x3028, 0x004C)                  # move.w $4C(a0),d0    his id: his speared pose (SPEARED)
+    a.w(0x0C40, SPEARED_IDS - 1)
+    a.bcc(0x62, 'sr_h7b')                # bhi
+    a.w(0xD040)                          # add.w d0,d0
+    a.pcrel(0x47FA, 'sr_spt')            # lea sr_spt(pc),a3
+    a.w(0x3033, 0x0000)                  # move.w (a3,d0.w),d0
+    a.bcc(0x67, 'sr_h7b')                # none: his own hit pose
+    a.w(0x3140, 0x001A)                  # move.w d0,$1A(a0)
+    a.label('sr_h7b')
     a.w(0x0C69, fr(0x405F), 0x001A)      # cmpi.w #last pull,$1A(a1)   the yank's last frame: held till
     a.bcc(0x66, 'sr_h8')                 #  he's in (from the far end of the screen)
     a.w(0x2669, 0x0088)                  # movea.l $88(a1),a3
@@ -943,6 +968,8 @@ def emit_spear_rope(a, sheet):
     a.w(0x4E75)
     a.label('sr_desc')
     a.out += bytes(desc)
+    a.label('sr_spt')
+    a.out += speared_frames()
     a.label('sr_v')
     a.out += bytes(2 * ROPE_VAR)
 

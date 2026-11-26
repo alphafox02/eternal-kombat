@@ -97,8 +97,12 @@ MEASURED = [
     # 42:24 (6-12; also the knockdown's first frame), then 42:01 again for ~10
     # while recovering (PLYR's code puts the script's first frame back, not the
     # script). So 42:26 is MK's hit, 42:24 the stagger, 42:01 the late recovery
-    # flinch that brackets them (scorpion_full.hit_pose). 42:25/42:27: unused.
-    ('hit_high',    ['42:26', '42:24', '42:01', '42:25', '42:27']),
+    # flinch that brackets them (scorpion_full.hit_pose). 42:25: unused by his hit (Raven's and
+    # Rax's throws and Midknight's grab show it on their victim).
+    ('hit_high',    ['42:26', '42:24', '42:01', '42:25']),
+    # On Scorpion's or Reptile's rope (mkinputs emit_spear_rope): MK's speared pose, leaning back
+    # (tools/capture/mkspeared.py). 42:27: no script or victim table shows it
+    ('speared',     ['42:27']),
     # dazed (EC's dizzy: FINISH HIM, a spear daze, a stage Overkill's stun):
     # MK's FINISH HIM sway, poses 5-11 of tools/capture/mkdizzy.py, played by mkinputs
     # at MK's timing (DAZE_SEQ). 41:25/41:26 are Blade's dizzy frames; 41:47-41:4c belong

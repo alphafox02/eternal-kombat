@@ -10,7 +10,8 @@ MK's select screen: top row Johnny Cage, Kano, (dragon), Sub-Zero, Sonya;
 bottom row Raiden, Liu Kang, Scorpion. Player 1's cursor starts on Kano,
 player 2's on Sub-Zero.
 
-    mkduelstate.py johnny|johnny_sonya|subzero|subzero_sonya|subzero_raiden|subzero_johnny|subzero_subzero|raiden|scorpion|liukang|sonya|kano
+    mkduelstate.py johnny|johnny_sonya|subzero|subzero_sonya|subzero_raiden|subzero_johnny|subzero_subzero|scorpion_raiden|scorpion_johnny|
+                   scorpion_liukang|scorpion_kano|scorpion_scorpion|scorpion_sonya|raiden|scorpion|liukang|sonya|kano
                    [--states DIR]   (where mk_select.state is and the fight state goes; default build/states/)
 """
 import os, sys
@@ -33,6 +34,12 @@ PICKS = {
     'subzero_liukang': (['right'], ['down', 'left'], 'mk_subzero_liukang_2p.state'),
     'subzero_kano': (['right'], ['left'], 'mk_subzero_kano_2p.state'),
     'scorpion_sonya': (['down', 'right', 'right'], ['right'], 'mk_scorpion_sonya_2p.state'),   # (his fatality on a woman)
+    # Scorpion's spear on each MK fighter of ours: tools/capture/mkspeared.py captures the victim
+    'scorpion_raiden': (['down', 'right', 'right'], ['down', 'left', 'left'], 'mk_scorpion_raiden_2p.state'),
+    'scorpion_johnny': (['down', 'right', 'right'], ['left', 'left'], 'mk_scorpion_johnny_2p.state'),
+    'scorpion_liukang': (['down', 'right', 'right'], ['down', 'left'], 'mk_scorpion_liukang_2p.state'),
+    'scorpion_kano': (['down', 'right', 'right'], ['left'], 'mk_scorpion_kano_2p.state'),
+    'scorpion_scorpion': (['down', 'right', 'right'], ['down'], 'mk_scorpion_scorpion_2p.state'),
     'sonya':    (['right', 'right'], [], 'mk_sonya_2p.state'),
     'raiden':   (['down'], [], 'mk_raiden_2p.state'),
     'liukang':  (['down', 'right'], [], 'mk_liukang_2p.state'),

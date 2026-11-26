@@ -169,7 +169,7 @@ Captures and measurements on the user's MK disc that made `data/` (recipes, soun
 | tool | what it does |
 |---|---|
 | `mkdizzy.py` | Capture Scorpion's MK dazed pose (FINISH HIM, as the loser) and his lying pose from the MK disc. |
-| `mkduelstate.py` | Make an MK 2-player fight state for capturing a fighter's moves (tools/lib/mkmoves.py --fighter=...), from build/states/mk_select.state. |
+| `mkduelstate.py` | Make an MK 2-player fight state for capturing a fighter's moves (tools/lib/mkmoves.py --fighter=...) or a victim (Scorpion or Sub-Zero against each fighter), from build/states/mk_select.state. |
 | `mkfataltrial.py` | Find an MK CD fatality's input by trying candidates, each matched against the start of MK's fatality music (CD track 13). |
 | `mkmovesounds.py` | Which MK CD samples does each move play, and when? |
 | `mkpitstate.py` | Make build/states/mk_pit_raw.state: Kano vs Kano at the start of a fight on MK's Pit, where the Pit tools start. |
@@ -182,6 +182,7 @@ Captures and measurements on the user's MK disc that made `data/` (recipes, soun
 | `mkselectstate.py` | Make build/states/mk_select.state from a cold boot of the user's MK CD (US): the character-select screen every MK capture starts from (tools/capture/mkduelstate.py). |
 | `mksound_measure.py` | Measure what MK does with its sound chip and CD drive during each recording tools/lib/mksound_render.py reproduces, into data/mk_sound/NAME.json. |
 | `mksound_probe.py` | Find an MK disc sample in a recorded fatality WAV (research only). |
+| `mkspeared.py` | Capture the pose MK CD's fighters hold on Scorpion's spear (leaning back; Raiden stands), from Scorpion vs each fighter's duel state. |
 | `mkunclip.py` | MK captures whose frames ran off MK's screen, put back whole (data/mk_recipes, data/mk_meta). |
 | `mkvictim.py` | Capture the victim of MK CD's Sub-Zero spine rip (the headless body), indexed in his own palette, for his EC death art. |
 | `mkvideo.py` | Record MK CD itself (with sound) as a reference clip for a move, to set beside Eternal Kombat's version. |

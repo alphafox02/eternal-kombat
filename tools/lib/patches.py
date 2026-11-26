@@ -144,7 +144,8 @@ SHANG = Spec(key='shang', name='SHANG TSUNG', host='CHA', host_id=11, mk_dir='mk
              portrait='mk_shang',              # (select and versus: mkportraits_disc.shang, his fighter art)
              win=(0xCB0A, b'   ETERNAL\0', b'     SHANG\0'), sheet_base=0xED, boss=True, files={'PL': 'ECH.PL'},
              aliases={'spear': 'skull', 'teleport_mk': 'idle', 'teleport': 'idle', 'fatality': 'idle',
-                      'fatality_fire': 'idle', 'fatality_skeleton': 'idle'},
+                      'fatality_fire': 'idle', 'fatality_skeleton': 'idle',
+                      'speared': 'hit_high'},      # (MK CD has no Scorpion vs Shang: his first hit pose)
              # his cast (move $34) is his own script (mkinputs.skull_plan): its poses pinned
              extra=[('skull', __import__('mkinputs').skull_plan('mk_moves_shang')[1]),
                     # his morph's blends (EMP 22-42: 3 per MK fighter) on frames no script or table uses

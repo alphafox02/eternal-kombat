@@ -353,7 +353,7 @@ def knockdown_pose(poses, k, n):
     return down[0] if down else air[-1]
 
 
-HIT_KEYS = {(0x42, f) for f in (0x26, 0x24, 0x01, 0x25, 0x27)}   # scorpion_map's hit group
+HIT_KEYS = {(0x42, f) for f in (0x26, 0x24, 0x01, 0x25)}   # scorpion_map's hit group
 HIT_LANDS = 64                # hit captures: P2 presses at frame 50; MK's reaction shows from ~67 (Raiden's stance runs to 61)
 
 
@@ -742,6 +742,19 @@ def grow_sheet(pl, n_new):
     return res, sheet
 
 
+# Near-identical poses stored once, for room: each pair has the same anchor and differs by fewer
+# than 200 pixels. (action, pose as kept) -> the one shown instead
+MERGES = {
+    # Raiden: for his full MK daze
+    'mk_moves_raiden': {('btn_c', 6): ('btn_c', 2), ('block', 3): ('block', 0),
+                        ('btn_a', 5): ('btn_a', 2), ('idle', 12): ('btn_a', 0),
+                        ('idle', 17): ('btn_a', 7), ('jump_up', 0): ('jump_back', 0)},
+    # Scorpion: for his speared pose (the spear's arm out at the hit and in the hold: 12 px apart;
+    # the pull's last pose and one past it: 1 px)
+    'mk_moves': {('spear', 15): ('spear', 5), ('spear', 31): ('spear', 27)},
+}
+
+
 def build(pl, root):
     # (only Scorpion strips; he keeps $44's chunks: patches.scorpion_ghost_art makes them his teleport's double)
     pl = bytearray(strip_sheets(pl, (0x45,)))   # (Blade's blast: only his own specials - BLA.CO $2BD4-$3B26,
@@ -799,12 +812,8 @@ def build(pl, root):
         if v:
             poses, anchors, _ = actions[v[0]]
             chosen[key] = canon[(crop_key(poses[v[1]]), tuple(anchors[v[1]]))]
-    if CFG['mk_dir'] == 'mk_moves_raiden':
-        # Reuse six near-identical poses to make room for his full MK daze.
-        # Each pair has the same anchor and differs by fewer than 200 pixels.
-        merges = {('btn_c', 6): ('btn_c', 2), ('block', 3): ('block', 0),
-                  ('btn_a', 5): ('btn_a', 2), ('idle', 12): ('btn_a', 0),
-                  ('idle', 17): ('btn_a', 7), ('jump_up', 0): ('jump_back', 0)}
+    merges = MERGES.get(CFG['mk_dir'])
+    if merges:
         for src, dst in merges.items():
             pa, aa, _ = actions[src[0]]
             pb, ab, _ = actions[dst[0]]
