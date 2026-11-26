@@ -3,7 +3,8 @@
 """Package the launcher as one file to download: an AppImage (Linux) or an .exe (Windows).
 
 Inside: a portable Python (python-build-standalone, pinned), the build's
-packages (requirements.txt, and py7zr for RetroArch's archives), and this
+packages (requirements.txt, and py7zr for RetroArch's archives; on Windows
+7-Zip's 7zr.exe as well), and this
 repository's tracked tools/ and data/ - no game data: the player's own discs
 are read when the app runs (tools/launcher/boot.py, ekapp.py).
 
@@ -23,6 +24,9 @@ PYTHON = {
     'windows': (PBS + 'cpython-3.12.16%2B20261124-x86_64-pc-windows-msvc-install_only.tar.gz',
                 '8152ff5b6c6c044ddbbaa3531dda59cb9ce5bd6cb670d4c9ac2e3ab91afa8778'),
 }
+# 7-Zip's standalone extractor (GNU LGPL, 7-zip.org): libretro's Windows archives need it (BCJ2)
+SEVENZIP = ('https://github.com/ip7z/7zip/releases/download/26.06/7zr.exe',
+            'e80db2dad715a6c5adabe292d31ed54e11f4e9b99ca349827b50573b175891bc')
 APPIMAGETOOL = ('https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage',
                 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0')
 # requirements.txt at the versions the game is built and checked with (art goes through Pillow and
@@ -129,6 +133,9 @@ def linux(out, work):
 
 def windows(out, work):
     st, _ = stage('windows', work)
+    fetch(*SEVENZIP, os.path.join(st, '7zr.exe'))     # (beside python/: tools/launcher/retroarch.sevenzip)
+    open(os.path.join(st, '7zr.txt'), 'w').write(
+        '7zr.exe is 7-Zip 26.06\'s standalone extractor, by Igor Pavlov: GNU LGPL, source at https://7-zip.org\n')
     payload = os.path.join(work, 'payload.zip')
     with zipfile.ZipFile(payload, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for d, _, fs in os.walk(st):

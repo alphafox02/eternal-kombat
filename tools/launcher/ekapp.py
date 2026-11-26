@@ -39,8 +39,14 @@ def identify(cue):
             return k, 'ok'
     for k, h in HEADER_HINTS.items():
         if h in head:
-            return k, 'a different dump or revision than the one this was made with: it may still work'
+            return k, 'other'
     return None, 'not a disc this project knows'
+
+
+# what to say about a disc that is the right game but another release (the build is made for one
+# exact release of each: another one stops it part way - an Eternal Champions "(RE)" release did)
+NEEDED = {'ec_us': 'the original USA release (Redump: "Eternal Champions - Challenge from the Dark Side (USA)")',
+          'mk_us': 'the original USA release (Redump: "Mortal Kombat (USA)")'}
 
 
 def cue_files(cue):
@@ -86,13 +92,19 @@ def find_inputs(top, say):
         if hashlib.md5(open(p, 'rb').read()).hexdigest() in BIOS_MD5.values():
             found['bios'] = p
             break
+    other = {}
     for p in sorted(cues):
         if all(k in found for k, _ in DISCS):
             break
         say(f'Looking at {os.path.basename(p)} ...')
-        key, _ = identify(p)
+        key, note = identify(p)
         if key in dict(DISCS) and key not in found:
-            found[key] = p
+            if note == 'ok':
+                found[key] = p
+            else:
+                other.setdefault(key, p)           # (another release: only if the right one isn't there)
+    for key, p in other.items():
+        found.setdefault(key, p)
     return found
 
 
@@ -195,11 +207,13 @@ class App:
             self.notes[key].config(text='ok' if ok else 'unknown BIOS')
             return True
         got, note = identify(p)
-        if got == key:
-            self.notes[key].config(text='ok' if note == 'ok' else 'other revision')
-            if note != 'ok':
-                self.say(f'{os.path.basename(p)}: {note}')
+        if got == key and note == 'ok':
+            self.notes[key].config(text='ok')
             return True
+        if got == key:
+            self.notes[key].config(text='other release')
+            self.say(f'{os.path.basename(p)} is another release of this disc: the build needs {NEEDED[key]}.')
+            return False
         self.notes[key].config(text='wrong disc' if got else 'not recognised')
         if got:
             self.say(f'{os.path.basename(p)} is the other disc ({dict(DISCS)[got]}).')
@@ -295,7 +309,8 @@ class App:
         cues = {}
         for key, title in DISCS:
             if not self.check(key):
-                self.say(f'Choose your {title} disc (its .cue) first.')
+                if self.notes[key].cget('text') != 'other release':
+                    self.say(f'Choose your {title} disc (its .cue) first.')
                 return
             cues[key] = self.vars[key].get().strip()
 

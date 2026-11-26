@@ -94,7 +94,6 @@ class Emulator:
 
     def install(self, say=lambda msg, frac=None: None):
         """Download (once) and unpack RetroArch and the core. say(message, fraction or None)."""
-        import py7zr
         os.makedirs(self.dir, exist_ok=True)
         dl = os.path.join(self.dir, 'downloads')
         os.makedirs(dl, exist_ok=True)
@@ -103,11 +102,9 @@ class Emulator:
         if os.path.exists(self.root):
             shutil.rmtree(self.root)
         say('Unpacking RetroArch ...', None)
-        with py7zr.SevenZipFile(ra) as z:
-            z.extractall(self.dir)
+        unpack(ra, self.dir)
         say('Unpacking the Genesis Plus GX core ...', None)
-        with py7zr.SevenZipFile(cores) as z:
-            z.extract(self.dir, targets=[self.p['core']])
+        unpack(cores, self.dir, self.p['core'])
         src = os.path.join(self.dir, *self.p['core'].split('/'))
         os.makedirs(os.path.dirname(self.core), exist_ok=True)
         if os.path.abspath(src) != os.path.abspath(self.core):
@@ -165,6 +162,39 @@ class Emulator:
             env['HOME'] = home
             env['XDG_CONFIG_HOME'] = os.path.join(home, '.config')
         return subprocess.Popen(cmd, cwd=self.root, env=env)
+
+
+def sevenzip():
+    """7-Zip's own extractor on Windows: libretro's Windows archives use its BCJ2 filter, which
+    py7zr can't undo. The app carries 7zr.exe beside its Python (tools/launcher/package.py);
+    an installed 7-Zip will do too. None elsewhere (py7zr unpacks the Linux archives)."""
+    if system() != 'windows':
+        return None
+    here = os.path.join(os.path.dirname(sys.prefix), '7zr.exe')
+    for p in (here, shutil.which('7z'), shutil.which('7zr'),
+              os.path.join(os.environ.get('ProgramFiles', r'C:\Program Files'), '7-Zip', '7z.exe')):
+        if p and os.path.isfile(p):
+            return p
+    raise RuntimeError('RetroArch\'s archives need 7-Zip to unpack, and it wasn\'t found. '
+                       'Install 7-Zip (7-zip.org), then press Play again.')
+
+
+def unpack(archive, dest, member=None):
+    """ARCHIVE (.7z) into DEST: all of it, or the one MEMBER (its path in the archive)."""
+    seven = sevenzip()
+    if seven:
+        cmd = [seven, 'x', archive, f'-o{dest}', '-y'] + ([member.replace('/', os.sep)] if member else [])
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace',
+                           creationflags=0x08000000)               # CREATE_NO_WINDOW
+        if r.returncode:
+            raise RuntimeError(f'unpacking {os.path.basename(archive)} failed: {r.stdout.strip()[-300:]}')
+        return
+    import py7zr
+    with py7zr.SevenZipFile(archive) as z:
+        if member:
+            z.extract(dest, targets=[member])
+        else:
+            z.extractall(dest)
 
 
 def _sha256(path):

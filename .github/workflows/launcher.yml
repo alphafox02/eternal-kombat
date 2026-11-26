@@ -30,6 +30,10 @@ jobs:
         run: APPIMAGE_EXTRACT_AND_RUN=1 dist/EternalKombat-x86_64.AppImage --selftest
       - name: The build's steps list (no discs here)
         run: build/package/stage/python/bin/python3 -P build/package/stage/app/tools/prepare.py --list
+      - name: RetroArch installs from the pinned downloads (what Play does first)
+        run: >-
+          build/package/stage/python/bin/python3 -P -c "import sys; sys.path.insert(0, 'build/package/stage/app/tools/launcher');
+          import retroarch; e = retroarch.Emulator('build/emu'); e.install(); print(e.ready(), e.run, e.core); assert e.ready()"
       - uses: actions/upload-artifact@v4
         with:
           name: EternalKombat-linux
@@ -48,6 +52,11 @@ jobs:
       - run: python tools/launcher/package.py windows --out dist
       - name: The build's steps list (no discs here)
         run: build/package/stage/python/python.exe -P build/package/stage/app/tools/prepare.py --list
+      - name: RetroArch installs from the pinned downloads, unpacked by the bundled 7zr.exe (what Play does first)
+        run: >-
+          build/package/stage/python/python.exe -P -c "import sys; sys.path.insert(0, 'build/package/stage/app/tools/launcher');
+          import retroarch; print('7-Zip:', retroarch.sevenzip()); assert retroarch.sevenzip().endswith('7zr.exe');
+          e = retroarch.Emulator('build/emu'); e.install(); print(e.ready(), e.run, e.core); assert e.ready()"
       - uses: actions/upload-artifact@v4
         with:
           name: EternalKombat-windows
