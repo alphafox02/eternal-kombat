@@ -247,7 +247,7 @@ the 32X build): reports from real hardware are welcome.
 ## Known issues
 
 - **Scorpion's and Reptile's spear:** an MK fighter on the rope leans back as in MK, but an EC
-  fighter stays in his own hit pose (MK has no art of them). The victim bleeds less, and is not
+  fighter shows a standing recoil of his own (MK has no art of them). The victim bleeds less, and is not
   shaken on the rope as MK shakes him. The flying rope reaches back to his hand, where MK's runs on
   behind him to the screen's edge. And Scorpion's spear shows 8 of MK's 35 poses (his art memory is full).
 - **Fewer of MK's poses:** a knockdown shows about 5 of MK's (Scorpion 4; Kano lies flat without MK's

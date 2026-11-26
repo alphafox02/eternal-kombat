@@ -655,12 +655,36 @@ SPEARED = 0x4227                  # an MK fighter's speared pose (scorpion_map '
 SPEARED_IDS = 27                  # fighter ids 0-26
 
 
+# EC's fighters on the rope (id -> a frame of his own): MK has no art of them, and their hit pose
+# (a crouch or a kneel, EC's projectile hit) read as knocked down. Each has a small standing recoil
+# from his own hit reactions (his frame as a jab lands, at its moment on the rope: build/shots/spear/
+# ec_review), the head knocked back where there's one.
+EC_SPEARED = {2: 0x3909,      # Shadow: both feet planted, shoulders turned
+              3: 0x2230,      # Larcen: upright, recoiling
+              4: 0x3197,      # R.A.X.: head back
+              5: 0x2E07,      # Slash
+              6: 0x3C0C,      # Trident
+              7: 0x6032,      # Midknight: head back, arms out
+              8: 0x4651,      # Xavier: head back
+              9: 0x4224,      # Blade: leaning back
+              10: 0x1D64,     # Jetta
+              14: 0x550E,     # Riptide: head turned away
+              15: 0x4D03,     # Ramses III: head snapped back
+              16: 0x5A51,     # Thanatos
+              21: 0x802E,     # Raven: leaning back
+              23: 0x8F05,     # Blast
+              24: 0x942E,     # Dawson
+              25: 0xAA0B}     # the Dark Champion (not AA0C: his head draws half faded)
+
+
 def speared_frames():
     """The pose each fighter (by id, $4C) holds on the rope, as MK leans its victim back
-    (tools/capture/mkspeared.py): the MK fighters' 42:27 in his own sheets; 0 for the
-    others (their hit pose)."""
+    (tools/capture/mkspeared.py): the MK fighters' 42:27 in his own sheets; EC's own
+    (EC_SPEARED); 0: his hit pose."""
     import patches
     t = [0] * SPEARED_IDS
+    for i, f in EC_SPEARED.items():
+        t[i] = f
     for sp in patches.MK_SPECS:
         t[sp.host_id] = SPEARED + ((sp.sheet_base - 0x40) << 8)
     return b''.join(w.to_bytes(2, 'big') for w in t)
