@@ -643,8 +643,9 @@ ROPE_TILES = 52                   # its VRAM block: its biggest frame's tiles (m
 ROPE_HIT = 0x031D                 # $78: damage 3, attack record $1D - the spear's own ('80 16 03 1D')
 ROPE_REACT = HIT_FIRST            # $A4: his hit reaction (EC's projectile hit puts him in ROPE_STATE)
 ROPE_STATE = 0x0E                 # $BE of a fighter EC's projectile hit: the spear's pull takes him from there
-ROPE_VAR = 16                     # vars a player: +0 the rope, +4 mode (1 flying, 2 on him), +6 it hit,
-                                  #  +8 its run when it hit (flying: calls held), +10 its step, +12 runs, +14 thrown this move
+ROPE_VAR = 18                     # vars a player: +0 the rope, +4 mode (1 flying, 2 on him), +6 it hit,
+                                  #  +8 its run when it hit (flying: calls held), +10 its step, +12 runs, +14 thrown this move,
+                                  #  +16 where it caught him (0 not yet, 1 standing, 2 in the air: not pinned)
 ROPE_FAR = 360                    # px from him: a miss gone off the screen
 ROPE_FLY_MAX = 40                 # calls his throw is held for its flight at most (ROPE_FAR / SPEED: ~24)
 ROPE_GRACE = 3                    # runs after its hit before it looks for his hit state
@@ -731,6 +732,7 @@ def emit_spear_rope(a, sheet):
     a.w(0x0C69, fr(0x422E), 0x001A)      # cmpi.w #release,$1A(a1)
     a.bccw(0x66, 'sr_x')
     a.w(0x357C, 0x0001, 0x000E)          # move.w #1,14(a2)
+    a.w(0x426A, 0x0010)                  # clr.w 16(a2)        where it catches him: not yet
     a.w(0x48E7, 0xFFFE)                  # movem.l d0-d7/a0-a6,-(sp)
     a.w(0x2A49)                          # movea.l a1,a5        (the spawn takes its owner in a5)
     a.pcrel(0x43FA, 'sr_desc')           # lea desc(pc),a1
@@ -813,6 +815,19 @@ def emit_spear_rope(a, sheet):
     a.w(0x0C40, HIT_LAST - HIT_FIRST)
     a.bccw(0x62, 'sr_x')                 # bhi
     a.label('sr_h3')
+    # caught in the air, EC's knockdown takes him (r_drag's +96, Reptile's 19(a2)): not pinned. It held
+    # him in his airborne reel for good, and the thrower on the yank's last frame (Riptide, mid-jump)
+    a.w(0x4A6A, 0x0010)                  # tst.w 16(a2)         decided?
+    a.bcc(0x66, 'sr_hd')
+    a.w(0x357C, 0x0001, 0x0010)          # move.w #1,16(a2)     standing ...
+    a.w(0x3028, 0x0052)                  # move.w $52(a0),d0    his y
+    a.w(0x5840)                          # addq.w #4,d0
+    a.w(0xB079); a.l(0x30000 + 0x1496)   # cmp.w floor.l,d0
+    a.bcc(0x6C, 'sr_hd')                 # bge: on it
+    a.w(0x357C, 0x0002, 0x0010)          # move.w #2,16(a2)     ... or in the air
+    a.label('sr_hd')
+    a.w(0x0C6A, 0x0002, 0x0010)          # cmpi.w #2,16(a2)
+    a.bccw(0x67, 'sr_x')
     a.w(0x2668, 0x0088)                  # movea.l $88(a0),a3
     a.w(0x2653)                          # movea.l (a3),a3      his move task
     a.w(0x3028, 0x00B2)                  # move.w $B2(a0),d0
