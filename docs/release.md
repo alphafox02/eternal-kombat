@@ -35,3 +35,16 @@ Pushing the tag (and the repository) is the maintainer's step.
 
 - Tested in emulators only (Genesis Plus GX; PicoDrive and ares for the 32X), not on hardware.
 - The build needs the US Eternal Champions CD and MK CD (tools/checkinputs.py names the exact dumps).
+
+## The app
+
+The players' app (tools/launcher: a Windows .exe and a Linux AppImage) is built by GitHub's machines
+from the same commit: pushing a `launcher-*` tag runs `.github/workflows/launcher.yml`, which packages
+both, checks each starts, installs RetroArch as Play would, and publishes them as that tag's release.
+
+```
+git tag -a launcher-1.0 -m "Eternal Kombat app 1.0" && git push origin launcher-1.0
+```
+
+To try the files first: run the workflow by hand (Actions > Launcher > Run workflow); they are the
+run's artifacts, seen only by the repository's owner.

@@ -2,7 +2,8 @@
 
 **Mortal Kombat's fighters inside Eternal Champions, on one Sega CD disc that you build from your own
 two games.** The result is an ordinary Sega CD disc image (BIN/CUE) for an emulator or a burned
-CD-R; an optional build also uses a 32X when one is attached (below).
+CD-R; an optional build also uses a 32X when one is attached (below). On Windows or Linux, the app
+([Quick start](#quick-start)) builds it and plays it for you: no terminal needed.
 
 https://github.com/user-attachments/assets/f60cf228-e38a-479d-89c5-50f12dce9120
 
@@ -54,6 +55,35 @@ Sub-Zero, Liu Kang, Kano and Sonya**, in the slots Eternal Champions keeps for i
   ([docs/32x.md](docs/32x.md)), so the standard build leaves it out.
 
 ## Quick start
+
+### With the app (Windows or Linux)
+
+![The Eternal Kombat app: your discs, Build, Play](docs/images/launcher.png)
+
+1. Download the app from the [Releases page](https://github.com/alphafox02/eternal-kombat/releases):
+   `EternalKombat.exe` (Windows 10/11, 64-bit) or `EternalKombat-x86_64.AppImage` (Linux: mark it
+   executable; on a system without FUSE, run it with `--appimage-extract-and-run`).
+2. Run it. Windows may say "Windows protected your PC" (the app isn't signed): **More info → Run
+   anyway**. The first start takes a minute to set up.
+3. Put your own disc images and BIOS in one folder and press **Find them in a folder...** (or choose
+   each). The app recognises them by their contents, whatever their names; as they are often named:
+
+   | | |
+   |---|---|
+   | *Eternal Champions: Challenge from the Dark Side* (USA), BIN/CUE | `Eternal Champions - Challenge from the Dark Side (US).cue` |
+   | *Mortal Kombat* (USA), Sega CD, BIN/CUE | `Mortal Kombat (USA).cue` |
+   | Sega CD BIOS (USA), only for Play | `Sega CD (U) - Model 1 v1.10 (1992).bin` |
+
+   Another release of a disc (an Eternal Champions "(RE)" image, say) won't build: the app says so.
+4. **Build the game** (a few minutes, once).
+5. **Play**: the first time, it downloads RetroArch from libretro (about 400 MB) and starts the game
+   in it. Or **Save a copy to...** and open `Eternal Kombat.cue` in an emulator of your own.
+
+The game is built on your machine from your own discs; the emulator is all the app ever downloads.
+The app keeps its files (the build, RetroArch, your saves) in `%LOCALAPPDATA%\EternalKombat` on
+Windows and `~/.local/share/EternalKombat` on Linux; **Open its folder** shows the built disc.
+
+### From the source (Linux)
 
 You need Linux with Python 3.11+, and your own rips of the *Eternal Champions: Challenge from the
 Dark Side* (USA) and *Mortal Kombat* (USA) Sega CD discs as BIN/CUE (see
@@ -122,6 +152,7 @@ for MK fighters, with block and both punches on their own buttons.
 | `tools/lib/` | the library they use: the patches, the disc and emulator code, the MK extractors |
 | `tools/checks/` | the test suite (`allchecks.py`) and `play.py test`'s scenarios |
 | `tools/capture/`, `tools/dev/`, `tools/x32/` | how the MK data was measured; developer tools; the 32X support's steps |
+| `tools/launcher/`, `.github/` | the app (its window, RetroArch, the packaging) and the GitHub workflow that builds it |
 | `data/` | the committed numbers that rebuild MK's art and sounds from your disc (no art, no sound) |
 | `docs/` | [tools.md](docs/tools.md) (every tool, one line each), [architecture.md](docs/architecture.md), [mk_fidelity_spec.md](docs/mk_fidelity_spec.md) (what "as MK CD" means and what's open), [maintaining.md](docs/maintaining.md) (the rules and the gate), [32x.md](docs/32x.md), [release.md](docs/release.md); `research/` finished investigations, `notes/` the lab notebook |
 | `roms/`, `bios/` | yours: the discs and BIOS (never committed) |
@@ -147,7 +178,7 @@ You supply your own rips. Put them anywhere under `roms/`, in any layout
 roms/   Eternal Champions: Challenge from the Dark Side (USA)   required: the engine
         Mortal Kombat (USA) (Sega CD)                            required: the content
         Mortal Kombat Kanzenban (Japan)                          optional
-bios/   bios_CD_U.bin  (Sega CD Model 1 v1.10)                   for the emulator (captures, tests)
+bios/   bios_CD_U.bin  (Sega CD Model 1 v1.10)                   for the emulator (playing, tests, captures)
 ```
 
 Discs are recognised by the SHA-1 of their data track, so file names don't
@@ -165,7 +196,7 @@ keeps it out.
 
 ## Setting up (Linux)
 
-System packages: Python 3.11+ with venv (the tools run with `python -P`), and for
+To build from the source (the app does all this for you). System packages: Python 3.11+ with venv (the tools run with `python -P`), and for
 the optional extras `ffmpeg` (videos) and Tk (`python3-tk`, the play window).
 
 ```
@@ -247,9 +278,11 @@ the 32X build): reports from real hardware are welcome.
 ## Known issues
 
 - **Scorpion's and Reptile's spear:** an MK fighter on the rope leans back as in MK, but an EC
-  fighter shows a standing recoil of his own (MK has no art of them). The victim bleeds less, and is not
-  shaken on the rope as MK shakes him. The flying rope reaches back to his hand, where MK's runs on
-  behind him to the screen's edge. And Scorpion's spear shows 8 of MK's 35 poses (his art memory is full).
+  fighter shows a standing recoil of his own (MK has no art of them), and Shang Tsung his hit pose
+  (MK CD has no fight to capture his from). The victim bleeds less, and is not shaken on the rope as
+  MK shakes him. The flying rope reaches back to his hand, where MK's runs on behind him to the
+  screen's edge. Scorpion's spear shows 8 of MK's 35 poses (his art memory is full). Thanatos's and the
+  Dark Champion's poses on the rope were only previewed, not played.
 - **Fewer of MK's poses:** a knockdown shows about 5 of MK's (Scorpion 4; Kano lies flat without MK's
   getting up), throws and projectile casts 6-11 of MK's ~25: the fighters' art memory is full.
 - **Blast's Vendetta** can't be done on an MK fighter yet: switched off. Where the tests land it (on
@@ -263,11 +296,16 @@ the 32X build): reports from real hardware are welcome.
   (FINISH HIM's music, the announcer). The title and main menu don't.
 - **Tested in emulators only** (Genesis Plus GX; PicoDrive and ares for the 32X build), not yet on a
   real Sega CD or 32X.
+- **The app** is new: tried on one Windows PC and on Linux so far. Windows warns about it the first time
+  (it isn't signed), and some antivirus programs flag apps packaged this way by mistake. There's no
+  macOS version; the source builds there in principle, untested. Play's first download is large (about
+  400 MB: libretro packs RetroArch's cores together).
 
 ## Tools
 
 The ones you run are in `tools/` (`checkinputs.py`, `prepare.py`, `build.py`, `play.py`) and
-`tools/checks/allchecks.py`; [docs/tools.md](docs/tools.md) says what every tool is for.
+`tools/checks/allchecks.py`; the app is `tools/launcher/` (from a checkout: `python3
+tools/launcher/ekapp.py`; its Play needs `pip install py7zr`). [docs/tools.md](docs/tools.md) says what every tool is for.
 
 ## Contributing
 
